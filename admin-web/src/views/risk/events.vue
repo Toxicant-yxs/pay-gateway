@@ -1,0 +1,1 @@
+<template><div class="page-container"><div class="card-shadow" style="padding: 40px; text-align: center;"><h2>{{ pageTitle }}</h2><p style="color: var(--text-secondary); margin-top: 12px;">该页面功能开发中...</p></div></div></template><script setup lang="ts">import { ref } from 'vue'; const pageTitle = ref('风险事件');</script>
