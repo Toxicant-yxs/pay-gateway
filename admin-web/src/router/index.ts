@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { getToken, isTokenValid, getUserInfo, logout } from '../utils/auth'
+import { useTagsViewStore } from '../stores/tagsView'
 
 const whiteList = ['/login']
 
@@ -143,6 +144,19 @@ const routes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/profile',
+    component: () => import('../layout/index.vue'),
+    meta: { title: '个人中心', hidden: true, requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'Profile',
+        component: () => import('../views/profile/index.vue'),
+        meta: { title: '个人中心', requiresAuth: true }
+      }
+    ]
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/dashboard'
   }
@@ -188,6 +202,14 @@ router.beforeEach((to, _from, next) => {
     logout()
     next({ path: '/login' })
   }
+})
+
+router.afterEach((to) => {
+  if (to.path === '/login') return
+  try {
+    const tagsViewStore = useTagsViewStore()
+    tagsViewStore.addView(to)
+  } catch {}
 })
 
 export default router

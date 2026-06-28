@@ -47,9 +47,12 @@
             <Expand v-else />
           </el-icon>
           <el-breadcrumb separator="/">
-            <el-breadcrumb-item v-for="item in breadcrumbs" :key="item.path">
-              {{ item.title }}
-            </el-breadcrumb-item>
+            <template v-for="(item, idx) in breadcrumbs" :key="item.path">
+              <el-breadcrumb-item v-if="item.isLink && idx < breadcrumbs.length - 1">
+                <router-link :to="item.path" class="breadcrumb-link">{{ item.title }}</router-link>
+              </el-breadcrumb-item>
+              <el-breadcrumb-item v-else>{{ item.title }}</el-breadcrumb-item>
+            </template>
           </el-breadcrumb>
         </div>
         <div class="header-right">
@@ -83,6 +86,7 @@
           </el-dropdown>
         </div>
       </header>
+      <TagsView />
       <main class="main-content">
         <router-view v-slot="{ Component }">
           <transition name="fade">
@@ -104,10 +108,13 @@ import {
   Connection, Warning, Document
 } from '@element-plus/icons-vue'
 import { useUserStore } from '../stores/user'
+import { useTagsViewStore } from '../stores/tagsView'
+import TagsView from '../components/TagsView/index.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const tagsViewStore = useTagsViewStore()
 const isCollapsed = ref(false)
 
 const toggleCollapse = () => {
@@ -134,7 +141,30 @@ const activeMenu = computed(() => route.path)
 
 const breadcrumbs = computed(() => {
   const matched = route.matched.filter(r => r.meta && r.meta.title)
-  return matched.map(r => ({ path: r.path, title: r.meta.title }))
+  const result: { path: string; title: string; isLink: boolean }[] = []
+  const titles = new Set<string>()
+  for (const r of matched) {
+    const title = r.meta.title as string
+    if (titles.has(title)) continue
+    titles.add(title)
+    const hasChildren = r.children && r.children.some((c: any) => c.meta?.title)
+    const isRedirect = !!r.redirect
+    const isLink = isRedirect || (!hasChildren)
+    let path = r.path
+    if (isRedirect && typeof r.redirect === 'string') {
+      path = r.redirect
+    } else if (hasChildren && !isRedirect) {
+      const firstChild = r.children?.find((c: any) => c.meta?.title)
+      if (firstChild) {
+        path = resolvePath(r.path, firstChild.path)
+      }
+    }
+    result.push({ path, title, isLink })
+  }
+  if (result.length > 0 && result[0].title !== '数据概览') {
+    result.unshift({ path: '/dashboard', title: '首页', isLink: true })
+  }
+  return result
 })
 
 const displayName = computed(() => userStore.username || '超级管理员')
@@ -163,12 +193,13 @@ const handleCommand = async (command: string) => {
       type: 'warning'
     })
     userStore.logout()
+    tagsViewStore.delAllViews()
     ElMessage.success('已退出登录')
     router.push('/login')
   } else if (command === 'profile') {
-    ElMessage.info('个人中心功能开发中')
-  } else {
-    ElMessage.info('设置功能开发中')
+    router.push('/profile')
+  } else if (command === 'settings') {
+    router.push('/system/settings')
   }
 }
 </script>
@@ -304,6 +335,30 @@ const handleCommand = async (command: string) => {
     color: var(--primary-color);
     background: var(--primary-bg);
   }
+}
+
+.breadcrumb-link {
+  color: var(--text-regular);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+
+  &:hover {
+    color: var(--primary-color);
+  }
+}
+
+:deep(.el-breadcrumb__inner) {
+  color: var(--text-regular);
+  font-weight: 400;
+
+  &.is-link {
+    color: var(--text-regular);
+  }
+}
+
+:deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .header-right {
