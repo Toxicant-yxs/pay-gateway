@@ -56,14 +56,10 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-tooltip content="搜索" placement="bottom">
-            <el-icon class="header-icon" :size="18"><Search /></el-icon>
+          <el-tooltip content="搜索 (Ctrl+K)" placement="bottom">
+            <el-icon class="header-icon" :size="18" @click="openSearch"><Search /></el-icon>
           </el-tooltip>
-          <el-tooltip content="消息" placement="bottom">
-            <el-badge :value="5" :max="9" class="header-icon-badge">
-              <el-icon class="header-icon" :size="18"><Bell /></el-icon>
-            </el-badge>
-          </el-tooltip>
+          <NotificationPanel />
           <el-tooltip content="全屏" placement="bottom">
             <el-icon class="header-icon" :size="18" @click="toggleFullscreen"><FullScreen /></el-icon>
           </el-tooltip>
@@ -87,6 +83,7 @@
         </div>
       </header>
       <TagsView />
+      <SearchDialog ref="searchDialogRef" />
       <main class="main-content">
         <router-view v-slot="{ Component }">
           <transition name="fade">
@@ -110,12 +107,19 @@ import {
 import { useUserStore } from '../stores/user'
 import { useTagsViewStore } from '../stores/tagsView'
 import TagsView from '../components/TagsView/index.vue'
+import NotificationPanel from '../components/NotificationPanel/index.vue'
+import SearchDialog from '../components/SearchDialog/index.vue'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const tagsViewStore = useTagsViewStore()
 const isCollapsed = ref(false)
+const searchDialogRef = ref<InstanceType<typeof SearchDialog>>()
+
+const openSearch = () => {
+  searchDialogRef.value?.open()
+}
 
 const toggleCollapse = () => {
   isCollapsed.value = !isCollapsed.value

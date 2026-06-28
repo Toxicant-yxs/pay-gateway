@@ -157,8 +157,14 @@ const routes: RouteRecordRaw[] = [
     ]
   },
   {
+    path: '/404',
+    name: 'NotFound',
+    component: () => import('../views/error/404.vue'),
+    meta: { title: '页面未找到', hidden: true, requiresAuth: false }
+  },
+  {
     path: '/:pathMatch(.*)*',
-    redirect: '/dashboard'
+    redirect: '/404'
   }
 ]
 
@@ -205,7 +211,7 @@ router.beforeEach((to, _from, next) => {
 })
 
 router.afterEach((to) => {
-  if (to.path === '/login') return
+  if (to.path === '/login' || to.path === '/404') return
   try {
     const tagsViewStore = useTagsViewStore()
     tagsViewStore.addView(to)
