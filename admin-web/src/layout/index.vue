@@ -18,20 +18,20 @@
           active-text-color="#fff"
         >
           <template v-for="route in menuRoutes" :key="route.path">
-            <el-sub-menu v-if="route.children && route.children.length > 1" :index="route.path">
+            <el-sub-menu v-if="route.children && route.children.filter(c => c.meta?.title).length > 1" :index="route.path">
               <template #title>
                 <el-icon><component :is="route.meta.icon" /></el-icon>
                 <span>{{ route.meta.title }}</span>
               </template>
               <el-menu-item
-                v-for="child in route.children"
+                v-for="child in route.children.filter(c => c.meta?.title)"
                 :key="child.path"
                 :index="resolvePath(route.path, child.path)"
               >
                 {{ child.meta.title }}
               </el-menu-item>
             </el-sub-menu>
-            <el-menu-item v-else :index="resolvePath(route.path, route.children?.[0]?.path || '')">
+            <el-menu-item v-else :index="getMenuIndex(route)">
               <el-icon><component :is="route.meta.icon" /></el-icon>
               <template #title>{{ route.meta.title }}</template>
             </el-menu-item>
@@ -68,9 +68,9 @@
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-info">
               <el-avatar :size="32" class="user-avatar">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=admin" alt="avatar" />
+                <img :src="userAvatar" alt="avatar" />
               </el-avatar>
-              <span class="username">超级管理员</span>
+              <span class="username">{{ displayName }}</span>
               <el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
@@ -97,15 +97,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   CreditCard, Fold, Expand, Search, Bell, FullScreen, User, Setting,
   SwitchButton, ArrowDown, DataAnalysis, OfficeBuilding, Tickets,
   Connection, Warning, Document
 } from '@element-plus/icons-vue'
+import { useUserStore } from '../stores/user'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 const isCollapsed = ref(false)
 
 const toggleCollapse = () => {
@@ -121,7 +123,11 @@ const toggleFullscreen = () => {
 }
 
 const menuRoutes = computed(() => {
-  return router.options.routes.filter(r => !r.meta?.hidden && r.path !== '/login')
+  return router.options.routes.filter(r => 
+    !r.meta?.hidden && 
+    r.component &&
+    r.meta?.title
+  )
 })
 
 const activeMenu = computed(() => route.path)
@@ -131,13 +137,32 @@ const breadcrumbs = computed(() => {
   return matched.map(r => ({ path: r.path, title: r.meta.title }))
 })
 
+const displayName = computed(() => userStore.username || '超级管理员')
+const userAvatar = computed(() => userStore.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin')
+
 const resolvePath = (parent: string, child: string) => {
+  if (!child) return parent
   if (child.startsWith('/')) return child
   return `${parent}/${child}`.replace(/\/+/g, '/')
 }
 
-const handleCommand = (command: string) => {
+const getMenuIndex = (route: any) => {
+  if (route.redirect) return route.redirect as string
+  const firstChild = route.children?.find((c: any) => c.meta?.title)
+  if (firstChild) {
+    return resolvePath(route.path, firstChild.path)
+  }
+  return route.path
+}
+
+const handleCommand = async (command: string) => {
   if (command === 'logout') {
+    await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    userStore.logout()
     ElMessage.success('已退出登录')
     router.push('/login')
   } else if (command === 'profile') {

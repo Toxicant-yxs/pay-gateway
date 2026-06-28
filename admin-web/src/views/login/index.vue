@@ -1,12 +1,5 @@
 <template>
   <div class="login-container">
-    <div class="login-bg">
-      <div class="bg-decoration">
-        <div class="circle circle-1"></div>
-        <div class="circle circle-2"></div>
-        <div class="circle circle-3"></div>
-      </div>
-    </div>
     <div class="login-content">
       <div class="login-left">
         <div class="brand-area">
@@ -18,22 +11,28 @@
         </div>
         <div class="features">
           <div class="feature-item">
-            <el-icon :size="24" color="#4080FF"><Shield /></el-icon>
-            <div>
+            <div class="feature-icon">
+              <el-icon :size="24" color="#4080FF"><Key /></el-icon>
+            </div>
+            <div class="feature-text">
               <h3>PCI DSS 合规</h3>
               <p>金融级安全防护，满足全球监管要求</p>
             </div>
           </div>
           <div class="feature-item">
-            <el-icon :size="24" color="#00B42A"><Connection /></el-icon>
-            <div>
+            <div class="feature-icon">
+              <el-icon :size="24" color="#00B42A"><Connection /></el-icon>
+            </div>
+            <div class="feature-text">
               <h3>60+ 支付渠道</h3>
               <p>一次对接，接入全球所有主流支付方式</p>
             </div>
           </div>
           <div class="feature-item">
-            <el-icon :size="24" color="#FF7D00"><DataTrending /></el-icon>
-            <div>
+            <div class="feature-icon">
+              <el-icon :size="24" color="#FF7D00"><TrendCharts /></el-icon>
+            </div>
+            <div class="feature-text">
               <h3>99.99% SLA</h3>
               <p>企业级高可用，异地多活架构保障</p>
             </div>
@@ -56,7 +55,7 @@
                 v-model="loginForm.username"
                 placeholder="请输入用户名"
                 size="large"
-                prefix-icon="User"
+                :prefix-icon="User"
               />
             </el-form-item>
             <el-form-item prop="password">
@@ -65,7 +64,7 @@
                 type="password"
                 placeholder="请输入密码"
                 size="large"
-                prefix-icon="Lock"
+                :prefix-icon="Lock"
                 show-password
                 @keyup.enter="handleLogin"
               />
@@ -85,7 +84,7 @@
             </el-button>
           </el-form>
           <div class="login-footer">
-            <p>© 2026 PayGateway. All rights reserved.</p>
+            <p>&copy; 2026 PayGateway. All rights reserved.</p>
           </div>
         </div>
       </div>
@@ -95,11 +94,14 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { CreditCard, Shield, Connection, DataTrending, User, Lock } from '@element-plus/icons-vue'
+import { CreditCard, Key, Connection, TrendCharts, User, Lock } from '@element-plus/icons-vue'
+import { useUserStore } from '../../stores/user'
 
 const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
 const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
 
@@ -116,14 +118,19 @@ const loginRules: FormRules = {
 
 const handleLogin = async () => {
   if (!loginFormRef.value) return
-  await loginFormRef.value.validate((valid) => {
+  await loginFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
-      setTimeout(() => {
-        loading.value = false
+      try {
+        await userStore.login(loginForm.username, loginForm.password)
         ElMessage.success('登录成功')
-        router.push('/dashboard')
-      }, 1000)
+        const redirect = (route.query.redirect as string) || '/dashboard'
+        router.push(redirect)
+      } catch {
+        ElMessage.error('登录失败，请重试')
+      } finally {
+        loading.value = false
+      }
     }
   })
 }
@@ -134,73 +141,21 @@ const handleLogin = async () => {
   width: 100%;
   height: 100vh;
   display: flex;
-  position: relative;
-  overflow: hidden;
-}
-
-.login-bg {
-  position: absolute;
-  inset: 0;
   background: linear-gradient(135deg, #001529 0%, #002140 50%, #003366 100%);
-}
-
-.bg-decoration {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.circle {
-  position: absolute;
-  border-radius: 50%;
-  opacity: 0.1;
-}
-
-.circle-1 {
-  width: 600px;
-  height: 600px;
-  background: var(--primary-color);
-  top: -200px;
-  right: -100px;
-  animation: float 20s ease-in-out infinite;
-}
-
-.circle-2 {
-  width: 400px;
-  height: 400px;
-  background: var(--cyan-color);
-  bottom: -100px;
-  left: -100px;
-  animation: float 15s ease-in-out infinite reverse;
-}
-
-.circle-3 {
-  width: 300px;
-  height: 300px;
-  background: var(--purple-color);
-  top: 50%;
-  left: 30%;
-  animation: float 18s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(30px, -30px) scale(1.1); }
 }
 
 .login-content {
   display: flex;
   width: 100%;
-  position: relative;
-  z-index: 1;
+  max-width: 1200px;
+  margin: auto;
+  padding: 40px;
+  gap: 60px;
+  align-items: center;
 }
 
 .login-left {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 60px 80px;
   color: #fff;
 }
 
@@ -211,8 +166,8 @@ const handleLogin = async () => {
 .brand-logo {
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, var(--primary-color), var(--cyan-color));
-  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, #165DFF, #14C9C9);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -243,65 +198,61 @@ const handleLogin = async () => {
   display: flex;
   align-items: flex-start;
   gap: 16px;
+}
 
+.feature-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.feature-text {
   h3 {
     font-size: 16px;
     font-weight: 600;
     margin-bottom: 4px;
+    margin-top: 4px;
   }
-
   p {
     font-size: 14px;
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
   }
-
-  .el-icon {
-    flex-shrink: 0;
-    margin-top: 2px;
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-md);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
 }
 
 .login-right {
-  width: 480px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  margin: 40px;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 440px;
+  flex-shrink: 0;
 }
 
 .login-form-wrapper {
-  width: 100%;
-  max-width: 360px;
-  padding: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  padding: 48px 40px;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 .login-title {
   font-size: 28px;
   font-weight: 700;
-  color: var(--text-primary);
+  color: #1D2129;
   margin-bottom: 8px;
 }
 
 .login-subtitle {
   font-size: 14px;
-  color: var(--text-secondary);
+  color: #86909C;
   margin-bottom: 40px;
 }
 
 .login-form {
-  .el-form-item {
+  :deep(.el-form-item) {
     margin-bottom: 24px;
   }
 }
@@ -314,10 +265,9 @@ const handleLogin = async () => {
 }
 
 .forgot-password {
-  color: var(--primary-color);
+  color: #165DFF;
   text-decoration: none;
   font-size: 14px;
-
   &:hover {
     text-decoration: underline;
   }
@@ -334,10 +284,10 @@ const handleLogin = async () => {
 .login-footer {
   margin-top: 40px;
   text-align: center;
-
   p {
     font-size: 12px;
-    color: var(--text-placeholder);
+    color: #C9CDD4;
+    margin: 0;
   }
 }
 
@@ -345,10 +295,12 @@ const handleLogin = async () => {
   .login-left {
     display: none;
   }
-
+  .login-content {
+    justify-content: center;
+  }
   .login-right {
     width: 100%;
-    margin: 20px;
+    max-width: 440px;
   }
 }
 </style>
