@@ -5,52 +5,69 @@ export interface DashboardStatistics {
   todayCountGrowth: number
   successRate: number
   successRateChange: number
-  avgResponseTime: number
-  avgResponseTimeChange: number
+  avgLatency: number
+  avgLatencyChange: number
 }
 
-export interface TrendPoint {
-  time: string
-  successAmount: number
-  successCount: number
-  failCount: number
+export interface TrendData {
+  xAxis?: string[]
+  xaxis?: string[]
+  successAmount: number[]
+  successCount: number[]
+  failCount: number[]
 }
 
 export interface ChannelStatusItem {
-  channelId: string
-  channelName: string
   channelCode: string
-  payTypes: string[]
-  status: 'NORMAL' | 'FLUCTUATING' | 'ABNORMAL' | 'DISABLED'
-  successRate: number
+  channelName: string
+  payTypes: string | string[]
+  status: number | string
+  avgSuccessRate?: number
+  successRate?: number
   avgLatency: number
-  qps: number
+  dailyCount?: number
+  qps?: number
+  dailyAmount?: number
 }
 
 export interface AlertItem {
-  alertId: string
-  type: AlertType
-  level: 'HIGH' | 'MEDIUM' | 'LOW'
+  id?: string
+  alertId?: string
+  type?: AlertType | string
+  level: 'HIGH' | 'MEDIUM' | 'LOW' | 'high' | 'medium' | 'low' | string
   title: string
-  content: string
-  createdAt: string
-  read: boolean
+  content?: string
+  message?: string
+  createdAt?: string
+  createdTime?: string
+  time?: string
+  read?: boolean
 }
 
-export type AlertType = 'CHANNEL_TIMEOUT' | 'RISK_BLOCK' | 'TRADE_WARNING' | 'RECON_DONE' | 'SYSTEM_NOTICE'
+export type AlertType = 'CHANNEL_TIMEOUT' | 'RISK_BLOCK' | 'TRADE_WARNING' | 'RECON_DONE' | 'SYSTEM_NOTICE' | string
 
 export interface RecentTrade {
   orderNo: string
-  merchantName: string
-  channelCode: string
+  merchantNo?: string
+  merchantName?: string
+  channelCode?: string
+  channel?: string
   amount: number
-  payType: string
-  status: string
-  createdAt: string
+  payType?: string
+  payMethod?: string
+  status: number | string
+  createdAt?: string
+  createdTime?: string
+  time?: string
+  subject?: string
+  clientIp?: string
+  paidAt?: string
+  actualAmount?: number
+  fee?: number
 }
 
 export interface DistributionItem {
   name: string
   value: number
-  percentage: number
+  percentage?: number
 }

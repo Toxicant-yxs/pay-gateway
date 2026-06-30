@@ -1,25 +1,30 @@
 import type { ChannelCode, PayType } from './transaction'
 
 export interface ChannelInfo {
-  channelId: string
-  channelCode: ChannelCode
+  id?: string
+  channelId?: string
+  channelCode: ChannelCode | string
   channelName: string
-  channelType: 1 | 2 | 3
-  payTypes: PayType[]
-  status: 0 | 1
-  priority: number
-  weight: number
-  feeRates: Record<string, number>
-  config: ChannelConfig
-  avgSuccessRate: number
-  avgLatency: number
-  currentQps: number
-  dailyAmount: number
-  dailyCount: number
+  channelType: number | string
+  payTypes: PayType[] | string
+  status: 0 | 1 | number
+  priority?: number
+  weight?: number
+  feeRates?: Record<string, number>
+  feeRate?: number
+  config?: ChannelConfig
+  avgSuccessRate?: number
+  successRate?: number
+  avgLatency?: number
+  latency?: number
+  currentQps?: number
+  qps?: number
+  dailyAmount?: number
+  dailyCount?: number
   appId?: string
   mchId?: string
-  createdAt: string
-  updatedAt: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface ChannelConfig {

@@ -122,7 +122,7 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        await userStore.login(loginForm.username, loginForm.password)
+        await userStore.login({ username: loginForm.username, password: loginForm.password })
         ElMessage.success('登录成功')
         const redirect = (route.query.redirect as string) || '/dashboard'
         router.push(redirect)

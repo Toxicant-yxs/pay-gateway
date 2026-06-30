@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 import type {
   DashboardStatistics,
-  TrendPoint,
+  TrendData,
   ChannelStatusItem,
   AlertItem,
   RecentTrade,
@@ -11,19 +11,14 @@ import type {
 export const dashboardApi = {
   getStatistics(params?: { startTime?: string; endTime?: string }) {
     return request<DashboardStatistics>({
-      url: '/dashboard/statistics',
+      url: '/dashboard/stats',
       method: 'get',
       params
     })
   },
 
   getTrend(params: { type: '1h' | '24h' | '7d' }) {
-    return request<{
-      xAxis: string[]
-      successAmount: number[]
-      successCount: number[]
-      failCount: number[]
-    }>({
+    return request<TrendData>({
       url: '/dashboard/trend',
       method: 'get',
       params

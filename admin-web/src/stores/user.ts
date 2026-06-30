@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo, generateMockToken, logout as authLogout, type UserInfo } from '@/utils/auth'
+import { authApi } from '@/api/auth'
+import { getToken, setToken, removeToken, getUserInfo, setUserInfo, removeUserInfo, logout as authLogout, type UserInfo } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref<string>(getToken() || '')
@@ -9,30 +10,40 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!token.value && !!userInfo.value)
   const username = computed(() => userInfo.value?.realName || userInfo.value?.username || '')
   const avatar = computed(() => userInfo.value?.avatar || '')
-  const roles = computed(() => userInfo.value?.roles || [])
-  const permissions = computed(() => userInfo.value?.permissions || [])
+  const roles = computed(() => userInfo.value?.roles || (userInfo.value?.roleCode ? [userInfo.value.roleCode] : ['admin']))
+  const permissions = computed(() => userInfo.value?.permissions || ['*'])
 
-  function login(username: string, _password: string): Promise<{ token: string; userInfo: UserInfo }> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const mockUser: UserInfo = {
-          userId: 'U000001',
-          username: username,
-          realName: username === 'admin' ? '超级管理员' : username,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
-          roles: ['admin'],
-          permissions: ['*']
-        }
-        const mockToken = generateMockToken(mockUser.userId)
+  async function login(loginForm: { username: string; password: string }) {
+    const res = await authApi.login(loginForm)
+    const { token: newToken, userInfo: newUserInfo } = res
+    const adaptedUserInfo: UserInfo = {
+      ...newUserInfo,
+      roles: newUserInfo.roles || (newUserInfo.roleCode ? [newUserInfo.roleCode] : ['admin']),
+      permissions: newUserInfo.permissions || ['*'],
+      lastLoginTime: newUserInfo.loginTime || newUserInfo.lastLoginTime
+    }
+    token.value = newToken
+    userInfo.value = adaptedUserInfo
+    setToken(newToken)
+    setUserInfo(adaptedUserInfo)
+    return { token: newToken, userInfo: adaptedUserInfo }
+  }
 
-        token.value = mockToken
-        userInfo.value = mockUser
-        setToken(mockToken)
-        setUserInfo(mockUser)
-
-        resolve({ token: mockToken, userInfo: mockUser })
-      }, 800)
-    })
+  async function fetchUserInfo() {
+    try {
+      const info = await authApi.getUserInfo()
+      const adaptedUserInfo: UserInfo = {
+        ...info,
+        roles: info.roles || (info.roleCode ? [info.roleCode] : ['admin']),
+        permissions: info.permissions || ['*'],
+        lastLoginTime: info.loginTime || info.lastLoginTime
+      }
+      userInfo.value = adaptedUserInfo
+      setUserInfo(adaptedUserInfo)
+      return adaptedUserInfo
+    } catch (e) {
+      return null
+    }
   }
 
   function loadFromStorage() {
@@ -44,6 +55,9 @@ export const useUserStore = defineStore('user', () => {
     token.value = ''
     userInfo.value = null
     authLogout()
+    try {
+      authApi.logout()
+    } catch {}
   }
 
   function resetToken() {
@@ -78,6 +92,7 @@ export const useUserStore = defineStore('user', () => {
     roles,
     permissions,
     login,
+    fetchUserInfo,
     logout,
     resetToken,
     loadFromStorage,

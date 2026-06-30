@@ -117,7 +117,7 @@
     </div>
 
     <div class="channel-grid">
-      <div v-for="channel in filteredChannels" :key="channel.id" class="card-shadow channel-card" :class="{ disabled: channel.status === 'maintenance' }">
+      <div v-for="channel in filteredChannels" :key="channel.channelCode" class="card-shadow channel-card" :class="{ disabled: channel.status === 0 }">
         <div class="channel-card-header">
           <div class="channel-logo" :style="{ background: channel.color }">
             <span class="logo-text">{{ channel.shortName }}</span>
@@ -130,16 +130,15 @@
             <div class="channel-status-row">
               <el-tag :type="getStatusTagType(channel.status)" size="small" effect="dark" round>
                 <el-icon class="status-icon">
-                  <CircleCheck v-if="channel.status === 'normal'" />
-                  <CircleClose v-else-if="channel.status === 'error'" />
-                  <Warning v-else />
+                  <CircleCheck v-if="channel.status === 1" />
+                  <CircleClose v-else />
                 </el-icon>
                 {{ getStatusText(channel.status) }}
               </el-tag>
               <el-switch
                 v-model="channel.enabled"
                 :active-text="channel.enabled ? '已启用' : '已停用'"
-                :disabled="channel.status === 'maintenance'"
+                :disabled="channel.status === 0"
                 @change="(val: boolean) => handleToggle(channel, val)"
               />
             </div>
@@ -147,7 +146,7 @@
         </div>
 
         <div class="channel-pay-methods">
-          <el-tag v-for="method in channel.payMethods" :key="method" size="small" effect="plain" class="method-tag">{{ method }}</el-tag>
+          <el-tag v-for="method in channel.payMethodsList" :key="method" size="small" effect="plain" class="method-tag">{{ method }}</el-tag>
         </div>
 
         <div class="channel-metrics">
@@ -160,7 +159,7 @@
             <span class="metric-value-sm" :class="getLatencyClass(channel.latency)">{{ channel.latency }}ms</span>
           </div>
           <div class="metric-item">
-            <span class="metric-label-sm">峰值QPS</span>
+            <span class="metric-label-sm">今日笔数</span>
             <span class="metric-value-sm">{{ channel.qps }}</span>
           </div>
         </div>
@@ -263,105 +262,136 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import {
   RefreshRight, Plus, Connection, Setting, Money, CreditCard,
   CircleCheck, CircleClose, Warning, SwitchButton, Edit, Search,
   Refresh, TrendCharts, Check
 } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { channelApi } from '@/api/channel'
+import type { ChannelInfo } from '@/types/channel'
 
 const filterForm = reactive({
   name: '',
   type: '',
-  status: ''
+  status: '' as number | string
 })
 
 const metrics = ref({
-  totalChannels: 8,
-  runningChannels: 5,
-  errorChannels: 1,
-  todayTransactions: '86,429',
-  payMethods: 18
+  totalChannels: 0,
+  runningChannels: 0,
+  errorChannels: 0,
+  todayTransactions: '0',
+  payMethods: 0
 })
 
-interface Channel {
-  id: number
+interface ChannelCardItem {
+  channelCode: string
   name: string
   shortName: string
   type: string
   typeLabel: string
   color: string
-  status: 'normal' | 'error' | 'maintenance'
+  status: number
   enabled: boolean
-  payMethods: string[]
+  payMethodsList: string[]
   successRate: number
   latency: number
   qps: number
 }
 
-const channels = ref<Channel[]>([
-  {
-    id: 1, name: '微信支付', shortName: '微', type: 'thirdparty', typeLabel: '第三方支付',
-    color: '#07C160', status: 'normal', enabled: true,
-    payMethods: ['JSAPI', 'Native', 'H5', 'APP', '小程序'],
-    successRate: 99.89, latency: 32, qps: 1256
-  },
-  {
-    id: 2, name: '支付宝', shortName: '支', type: 'thirdparty', typeLabel: '第三方支付',
-    color: '#1677FF', status: 'normal', enabled: true,
-    payMethods: ['电脑网站', '手机网站', 'APP', 'H5', '预授权'],
-    successRate: 99.92, latency: 28, qps: 1089
-  },
-  {
-    id: 3, name: '银联支付', shortName: '银', type: 'bankcard', typeLabel: '银行卡支付',
-    color: '#E60012', status: 'error', enabled: true,
-    payMethods: ['银联在线', '网关支付', '代收付'],
-    successRate: 95.23, latency: 156, qps: 425
-  },
-  {
-    id: 4, name: 'Visa/MC', shortName: 'V', type: 'international', typeLabel: '国际支付',
-    color: '#1A1F71', status: 'normal', enabled: true,
-    payMethods: ['Visa', 'MasterCard', 'JCB', 'AE'],
-    successRate: 99.21, latency: 186, qps: 234
-  },
-  {
-    id: 5, name: 'Apple Pay', shortName: 'A', type: 'thirdparty', typeLabel: '第三方支付',
-    color: '#000000', status: 'normal', enabled: true,
-    payMethods: ['Apple Pay Web', 'Apple Pay App'],
-    successRate: 99.68, latency: 45, qps: 156
-  },
-  {
-    id: 6, name: '云闪付', shortName: '云', type: 'bankcard', typeLabel: '银行卡支付',
-    color: '#E60012', status: 'maintenance', enabled: false,
-    payMethods: ['云闪付APP', '二维码支付'],
-    successRate: 0, latency: 0, qps: 0
-  },
-  {
-    id: 7, name: '数字人民币', shortName: '数', type: 'digital', typeLabel: '数字人民币',
-    color: '#D4382F', status: 'normal', enabled: true,
-    payMethods: ['数字人民币APP', '硬钱包'],
-    successRate: 99.95, latency: 38, qps: 89
-  },
-  {
-    id: 8, name: 'PayPal', shortName: 'P', type: 'international', typeLabel: '国际支付',
-    color: '#003087', status: 'maintenance', enabled: false,
-    payMethods: ['PayPal Checkout', 'PayPal Pro', 'Venmo'],
-    successRate: 0, latency: 0, qps: 0
-  }
-])
+const channels = ref<ChannelCardItem[]>([])
+
+const channelColors: Record<string, string> = {
+  wechat: '#07C160',
+  WECHAT: '#07C160',
+  alipay: '#1677FF',
+  ALIPAY: '#1677FF',
+  unionpay: '#E60012',
+  UNIONPAY: '#E60012',
+  visa: '#1A1F71',
+  VISA: '#1A1F71',
+  dcb: '#D4382F',
+  DCB: '#D4382F'
+}
+
+const channelShortNameMap: Record<string, string> = {
+  wechat: '微',
+  WECHAT: '微',
+  alipay: '支',
+  ALIPAY: '支',
+  unionpay: '银',
+  UNIONPAY: '银',
+  visa: 'V',
+  VISA: 'V',
+  dcb: '数',
+  DCB: '数'
+}
+
+const channelNameMap: Record<string, string> = {
+  wechat: '微信支付',
+  WECHAT: '微信支付',
+  alipay: '支付宝',
+  ALIPAY: '支付宝',
+  unionpay: '银联支付',
+  UNIONPAY: '银联支付',
+  visa: 'Visa/MC',
+  VISA: 'Visa/MC',
+  dcb: '数字人民币',
+  DCB: '数字人民币'
+}
+
+const channelTypeMap: Record<number | string, { type: string; label: string }> = {
+  1: { type: 'thirdparty', label: '第三方支付' },
+  2: { type: 'bankcard', label: '银行卡支付' },
+  3: { type: 'international', label: '国际支付' },
+  4: { type: 'digital', label: '数字人民币' },
+  thirdparty: { type: 'thirdparty', label: '第三方支付' },
+  bankcard: { type: 'bankcard', label: '银行卡支付' },
+  international: { type: 'international', label: '国际支付' },
+  digital: { type: 'digital', label: '数字人民币' }
+}
+
+function parsePayTypes(payTypes: string | string[] | undefined): string[] {
+  if (!payTypes) return []
+  if (Array.isArray(payTypes)) return payTypes
+  return String(payTypes).split(',').map(t => t.trim()).filter(Boolean)
+}
+
+function getChannelShortName(code: string, name: string): string {
+  if (channelShortNameMap[code]) return channelShortNameMap[code]
+  if (name) return name.charAt(0)
+  return 'C'
+}
+
+function getChannelName(code: string, name?: string): string {
+  if (name) return name
+  return channelNameMap[code] ?? code
+}
+
+function getChannelColor(code: string): string {
+  return channelColors[code] ?? 'var(--primary-color)'
+}
+
+function getChannelTypeInfo(channelType: number | string | undefined): { type: string; label: string } {
+  if (channelType === undefined || channelType === null) return { type: 'thirdparty', label: '第三方支付' }
+  return channelTypeMap[channelType] ?? { type: 'thirdparty', label: '第三方支付' }
+}
 
 const filteredChannels = computed(() => {
   return channels.value.filter(ch => {
     if (filterForm.name && !ch.name.includes(filterForm.name)) return false
     if (filterForm.type && ch.type !== filterForm.type) return false
-    if (filterForm.status && ch.status !== filterForm.status) return false
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      if (Number(filterForm.status) !== ch.status) return false
+    }
     return true
   })
 })
 
 const configDialogVisible = ref(false)
-const currentChannel = ref<Channel | null>(null)
+const currentChannel = ref<ChannelCardItem | null>(null)
 const configFormRef = ref<FormInstance>()
 
 const configForm = reactive({
@@ -384,7 +414,59 @@ const configRules: FormRules = {
   notifyUrl: [{ required: true, message: '请输入回调地址', trigger: 'blur' }]
 }
 
-const handleSearch = () => {}
+async function loadData() {
+  try {
+    const data = await channelApi.getList()
+    if (Array.isArray(data)) {
+      channels.value = data.map((ch: ChannelInfo) => {
+        const typeInfo = getChannelTypeInfo(ch.channelType)
+        const chName = getChannelName(String(ch.channelCode ?? ''), ch.channelName)
+        const successRate = ch.avgSuccessRate ?? ch.successRate ?? 0
+        return {
+          channelCode: String(ch.channelCode ?? ''),
+          name: chName,
+          shortName: getChannelShortName(String(ch.channelCode ?? ''), chName),
+          type: typeInfo.type,
+          typeLabel: typeInfo.label,
+          color: getChannelColor(String(ch.channelCode ?? '')),
+          status: ch.status === 1 ? 1 : 0,
+          enabled: ch.status === 1,
+          payMethodsList: parsePayTypes(ch.payTypes),
+          successRate: Number(Number(successRate).toFixed(2)),
+          latency: Math.round(ch.avgLatency ?? ch.latency ?? 0),
+          qps: ch.dailyCount ?? ch.qps ?? ch.currentQps ?? 0
+        }
+      })
+      metrics.value.totalChannels = channels.value.length
+      metrics.value.runningChannels = channels.value.filter(c => c.status === 1).length
+      metrics.value.errorChannels = channels.value.filter(c => c.status === 0).length
+      metrics.value.todayTransactions = channels.value.reduce((sum, c) => sum + c.qps, 0).toLocaleString('zh-CN')
+      const allPayMethods = new Set<string>()
+      channels.value.forEach(c => c.payMethodsList.forEach(m => allPayMethods.add(m)))
+      metrics.value.payMethods = allPayMethods.size
+    }
+  } catch (e) {
+    console.error('Failed to load channels:', e)
+    channels.value = [
+      {
+        channelCode: 'WECHAT', name: '微信支付', shortName: '微', type: 'thirdparty', typeLabel: '第三方支付',
+        color: '#07C160', status: 1, enabled: true,
+        payMethodsList: ['JSAPI', 'Native', 'H5'],
+        successRate: 99.89, latency: 32, qps: 0
+      },
+      {
+        channelCode: 'ALIPAY', name: '支付宝', shortName: '支', type: 'thirdparty', typeLabel: '第三方支付',
+        color: '#1677FF', status: 1, enabled: true,
+        payMethodsList: ['电脑网站', '手机网站'],
+        successRate: 99.92, latency: 28, qps: 0
+      }
+    ]
+  }
+}
+
+const handleSearch = () => {
+  loadData()
+}
 
 const handleReset = () => {
   filterForm.name = ''
@@ -397,14 +479,14 @@ const getTypeTagType = (type: string) => {
   return map[type] || ''
 }
 
-const getStatusTagType = (status: string) => {
-  const map: Record<string, string> = { normal: 'success', error: 'danger', maintenance: 'info' }
-  return map[status] || 'info'
+const getStatusTagType = (status: number) => {
+  if (status === 1) return 'success'
+  return 'danger'
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = { normal: '正常运行', error: '异常', maintenance: '维护中' }
-  return map[status] || '未知'
+const getStatusText = (status: number) => {
+  if (status === 1) return '正常运行'
+  return '已停用'
 }
 
 const getRateClass = (rate: number) => {
@@ -425,20 +507,20 @@ const getProgressColor = (rate: number) => {
   return '#F53F3F'
 }
 
-const handleToggle = (channel: Channel, val: boolean) => {
+const handleToggle = (channel: ChannelCardItem, val: boolean) => {
   channel.enabled = val
 }
 
-const handleConfig = (channel: Channel) => {
+const handleConfig = (channel: ChannelCardItem) => {
   currentChannel.value = channel
-  configForm.merchantId = 'MCH' + String(channel.id).padStart(6, '0')
-  configForm.appId = channel.id <= 2 ? 'wx' + String(Date.now()).slice(-10) : 'APP' + String(channel.id).padStart(8, '0')
+  configForm.merchantId = 'MCH' + String(channel.channelCode).padStart(6, '0')
+  configForm.appId = 'APP' + String(channel.channelCode).padStart(8, '0')
   configForm.apiKey = '****************************************'
   configForm.apiV3Key = ''
   configForm.notifyUrl = 'https://api.example.com/notify/' + channel.name.toLowerCase().replace(/[^a-z]/g, '')
-  configForm.signType = channel.type === 'international' ? 'HMAC-SHA256' : channel.id <= 2 ? 'RSA2' : 'MD5'
+  configForm.signType = channel.type === 'international' ? 'HMAC-SHA256' : 'RSA2'
   configForm.connectTimeout = 10
-  configForm.feeRate = channel.id === 1 ? 0.6 : channel.id === 2 ? 0.55 : channel.type === 'international' ? 2.5 : 0.65
+  configForm.feeRate = 0.6
   configForm.enabled = channel.enabled
   configForm.sandbox = false
   configDialogVisible.value = true
@@ -454,6 +536,10 @@ const handleSaveConfig = async () => {
 }
 
 const handleTestConnection = () => {}
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style lang="scss" scoped>

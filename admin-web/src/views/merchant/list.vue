@@ -80,30 +80,47 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column prop="merchantId" label="商户号" width="140">
+        <el-table-column prop="merchantNo" label="商户号" width="140">
           <template #default="{ row }">
-            <span class="mono-text">{{ row.merchantId }}</span>
+            <span class="mono-text">{{ row.merchantNo ?? row.merchantId ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="商户名称" min-width="200">
+        <el-table-column prop="merchantName" label="商户名称" min-width="200">
           <template #default="{ row }">
             <div class="merchant-cell">
-              <el-avatar :size="32" :style="{ background: row.avatarColor }">
-                {{ row.name.charAt(0) }}
+              <el-avatar :size="32" :src="row.avatar" :style="{ background: row.avatarColor ?? getAvatarColor(row.merchantNo ?? row.merchantId) }">
+                {{ (row.merchantName ?? row.shortName ?? row.merchantNo ?? '?').charAt(0) }}
               </el-avatar>
               <div>
-                <div class="merchant-name">{{ row.name }}</div>
-                <div class="merchant-short">{{ row.shortName }}</div>
+                <div class="merchant-name">{{ row.merchantName ?? row.shortName ?? row.merchantNo ?? '-' }}</div>
+                <div class="merchant-short">{{ row.shortName ?? '' }}</div>
               </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="industry" label="所属行业" width="120" />
-        <el-table-column prop="contact" label="联系人" width="100" />
-        <el-table-column prop="phone" label="联系电话" width="130" />
-        <el-table-column prop="totalAmount" label="累计交易额" width="140" align="right">
+        <el-table-column prop="industry" label="所属行业" width="120">
           <template #default="{ row }">
-            <span class="amount-text">¥{{ formatNumber(row.totalAmount) }}</span>
+            {{ getIndustryText(row.industry ?? row.industryType) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="contactName" label="联系人" width="100">
+          <template #default="{ row }">
+            {{ row.contactName ?? row.contact ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="contactPhone" label="联系电话" width="130">
+          <template #default="{ row }">
+            {{ row.contactPhone ?? row.phone ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="level" label="商户等级" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ row.level ?? 'L1' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="feeRate" label="费率" width="100" align="right">
+          <template #default="{ row }">
+            {{ row.feeRate != null ? Number(row.feeRate).toFixed(2) + '%' : '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
@@ -113,13 +130,17 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="入驻时间" width="160" />
+        <el-table-column prop="createdAt" label="入驻时间" width="160">
+          <template #default="{ row }">
+            {{ row.createdAt ?? row.createTime ?? '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
             <el-button type="primary" link size="small">编辑</el-button>
-            <el-button type="warning" link size="small" v-if="row.status === 'normal'">冻结</el-button>
-            <el-button type="success" link size="small" v-if="row.status === 'frozen'">解冻</el-button>
+            <el-button type="warning" link size="small" v-if="row.status === 1 || row.status === 'NORMAL'">冻结</el-button>
+            <el-button type="success" link size="small" v-if="row.status === 2 || row.status === 'FROZEN'">解冻</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -131,6 +152,8 @@
           :total="total"
           layout="total, sizes, prev, pager, next, jumper"
           background
+          @current-change="loadData"
+          @size-change="loadData"
         />
       </div>
     </div>
@@ -144,13 +167,13 @@
     >
       <div v-if="currentMerchant" class="merchant-detail">
         <div class="detail-header">
-          <el-avatar :size="64" :style="{ background: currentMerchant.avatarColor }">
-            {{ currentMerchant.name.charAt(0) }}
+          <el-avatar :size="64" :src="currentMerchant.avatar" :style="{ background: currentMerchant.avatarColor ?? getAvatarColor(currentMerchant.merchantNo ?? currentMerchant.merchantId) }">
+            {{ (currentMerchant.merchantName ?? currentMerchant.shortName ?? currentMerchant.merchantNo ?? '?').charAt(0) }}
           </el-avatar>
           <div class="detail-title">
-            <h3>{{ currentMerchant.name }}</h3>
+            <h3>{{ currentMerchant.merchantName ?? currentMerchant.name ?? currentMerchant.shortName ?? '-' }}</h3>
             <div class="detail-meta">
-              <span class="mono-text">{{ currentMerchant.merchantId }}</span>
+              <span class="mono-text">{{ currentMerchant.merchantNo ?? currentMerchant.merchantId ?? '-' }}</span>
               <el-tag :type="getStatusType(currentMerchant.status)" size="small" style="margin-left: 12px">
                 {{ getStatusText(currentMerchant.status) }}
               </el-tag>
@@ -161,16 +184,18 @@
         <el-tabs v-model="activeTab" class="detail-tabs">
           <el-tab-pane label="基本信息" name="basic">
             <el-descriptions :column="2" border class="info-descriptions">
-              <el-descriptions-item label="商户简称">{{ currentMerchant.shortName }}</el-descriptions-item>
-              <el-descriptions-item label="所属行业">{{ currentMerchant.industry }}</el-descriptions-item>
-              <el-descriptions-item label="联系人">{{ currentMerchant.contact }}</el-descriptions-item>
-              <el-descriptions-item label="联系电话">{{ currentMerchant.phone }}</el-descriptions-item>
-              <el-descriptions-item label="电子邮箱">{{ currentMerchant.email }}</el-descriptions-item>
-              <el-descriptions-item label="入驻时间">{{ currentMerchant.createTime }}</el-descriptions-item>
+              <el-descriptions-item label="商户简称">{{ currentMerchant.shortName ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="所属行业">{{ getIndustryText(currentMerchant.industry ?? currentMerchant.industryType) }}</el-descriptions-item>
+              <el-descriptions-item label="联系人">{{ currentMerchant.contactName ?? currentMerchant.contact ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="联系电话">{{ currentMerchant.contactPhone ?? currentMerchant.phone ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="电子邮箱">{{ currentMerchant.contactEmail ?? currentMerchant.email ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="入驻时间">{{ currentMerchant.createdAt ?? currentMerchant.createTime ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="结算周期">{{ currentMerchant.settleCycle ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="商户等级">{{ currentMerchant.level ?? 'L1' }}</el-descriptions-item>
               <el-descriptions-item label="营业执照号" :span="2">
-                <span class="mono-text">{{ currentMerchant.licenseNo }}</span>
+                <span class="mono-text">{{ currentMerchant.businessLicense ?? currentMerchant.licenseNo ?? '-' }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="商户地址" :span="2">{{ currentMerchant.address }}</el-descriptions-item>
+              <el-descriptions-item label="商户地址" :span="2">{{ currentMerchant.address ?? '-' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           <el-tab-pane label="交易统计" name="stats">
@@ -254,25 +279,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Upload, Plus, Search, Refresh, Delete, Download } from '@element-plus/icons-vue'
+import { merchantApi } from '@/api/merchant'
+import type { MerchantItem } from '@/types/merchant'
 
 const loading = ref(false)
 const showAddDialog = ref(false)
 const drawerVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(56)
-const selectedRows = ref<any[]>([])
-const currentMerchant = ref<any>(null)
+const total = ref(0)
+const selectedRows = ref<MerchantItem[]>([])
+const currentMerchant = ref<MerchantItem | null>(null)
 const activeTab = ref('basic')
 
 const filterForm = reactive({
   name: '',
   merchantId: '',
-  status: '',
-  dateRange: []
+  merchantName: '',
+  merchantNo: '',
+  status: '' as number | string,
+  dateRange: [] as Date[] | string[]
 })
 
 const addForm = reactive({
@@ -280,28 +309,63 @@ const addForm = reactive({
   shortName: '',
   industry: '',
   contact: '',
+  contactName: '',
   phone: '',
+  contactPhone: '',
   email: ''
 })
 
 const avatarColors = ['#165DFF', '#00B42A', '#FF7D00', '#722ED1', '#14C9C9', '#F53F3F']
 
-const tableData = ref([
-  { merchantId: 'M100001', name: '星辰电商平台', shortName: '星辰电商', industry: '电商零售', contact: '张三', phone: '138****8888', email: 'zhangsan@xingchen.com', totalAmount: 128560000, status: 'normal', createTime: '2025-08-15 10:30:00', licenseNo: '91310000MA1K3XYZ01', address: '上海市浦东新区张江高科技园区', avatarColor: '#165DFF' },
-  { merchantId: 'M100002', name: '云海餐饮连锁', shortName: '云海餐饮', industry: '餐饮美食', contact: '李四', phone: '139****6666', email: 'lisi@yunhai.com', totalAmount: 45230000, status: 'normal', createTime: '2025-09-22 14:20:00', licenseNo: '91310000MA1K3XYZ02', address: '北京市朝阳区望京SOHO', avatarColor: '#00B42A' },
-  { merchantId: 'M100003', name: '智学在线教育', shortName: '智学教育', industry: '教育培训', contact: '王五', phone: '137****5555', email: 'wangwu@zhixue.com', totalAmount: 28900000, status: 'pending', createTime: '2026-06-20 09:15:00', licenseNo: '91310000MA1K3XYZ03', address: '杭州市余杭区未来科技城', avatarColor: '#FF7D00' },
-  { merchantId: 'M100004', name: '速达出行科技', shortName: '速达出行', industry: '出行交通', contact: '赵六', phone: '136****4444', email: 'zhaoliu@suda.com', totalAmount: 89340000, status: 'frozen', createTime: '2025-11-08 16:45:00', licenseNo: '91310000MA1K3XYZ04', address: '深圳市南山区科技园', avatarColor: '#722ED1' },
-  { merchantId: 'M100005', name: '趣玩数字娱乐', shortName: '趣玩娱乐', industry: '数字娱乐', contact: '钱七', phone: '135****3333', email: 'qianqi@quwan.com', totalAmount: 156780000, status: 'normal', createTime: '2025-06-10 11:00:00', licenseNo: '91310000MA1K3XYZ05', address: '广州市天河区珠江新城', avatarColor: '#14C9C9' },
-  { merchantId: 'M100006', name: '康美医疗健康', shortName: '康美医疗', industry: '其他', contact: '孙八', phone: '134****2222', email: 'sunba@kangmei.com', totalAmount: 12450000, status: 'disabled', createTime: '2025-12-01 08:30:00', licenseNo: '91310000MA1K3XYZ06', address: '成都市高新区天府大道', avatarColor: '#F53F3F' }
-])
+const tableData = ref<MerchantItem[]>([])
+
+const merchantStatusMap: Record<number, { text: string; type: string }> = {
+  0: { text: '待审核', type: 'warning' },
+  1: { text: '正常', type: 'success' },
+  2: { text: '已冻结', type: 'info' },
+  3: { text: '已注销', type: 'danger' },
+  4: { text: '已驳回', type: 'danger' }
+}
+
+const industryMap: Record<string, string> = {
+  E_COMMERCE: '电商零售',
+  CATERING: '餐饮美食',
+  EDUCATION: '教育培训',
+  TRANSPORT: '出行交通',
+  ENTERTAINMENT: '数字娱乐',
+  HEALTHCARE: '医疗健康',
+  FINANCE: '金融服务',
+  OTHER: '其他',
+  '电商零售': '电商零售',
+  '餐饮美食': '餐饮美食',
+  '教育培训': '教育培训',
+  '出行交通': '出行交通',
+  '数字娱乐': '数字娱乐',
+  '医疗健康': '医疗健康',
+  '金融服务': '金融服务'
+}
+
+function getAvatarColor(merchantNo?: string): string {
+  if (!merchantNo) return avatarColors[0]
+  let hash = 0
+  for (let i = 0; i < merchantNo.length; i++) {
+    hash = merchantNo.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return avatarColors[Math.abs(hash) % avatarColors.length]
+}
+
+function getIndustryText(industry: string | undefined): string {
+  if (!industry) return '其他'
+  return industryMap[industry] ?? industry
+}
 
 const merchantStats = computed(() => [
-  { label: '今日交易额', value: '¥128,560', color: 'var(--primary-color)' },
-  { label: '今日笔数', value: '856', color: 'var(--success-color)' },
-  { label: '成功率', value: '99.8%', color: 'var(--warning-color)' },
-  { label: '累计交易额', value: '¥' + formatNumber(currentMerchant.value?.totalAmount || 0), color: 'var(--purple-color)' },
-  { label: '累计笔数', value: '125,680', color: 'var(--cyan-color)' },
-  { label: '退款率', value: '0.32%', color: 'var(--danger-color)' }
+  { label: '今日交易额', value: '¥--', color: 'var(--primary-color)' },
+  { label: '今日笔数', value: '--', color: 'var(--success-color)' },
+  { label: '成功率', value: '--', color: 'var(--warning-color)' },
+  { label: '累计交易额', value: '¥' + formatNumber(currentMerchant.value?.totalAmount ?? 0), color: 'var(--purple-color)' },
+  { label: '累计笔数', value: '--', color: 'var(--cyan-color)' },
+  { label: '退款率', value: '--', color: 'var(--danger-color)' }
 ])
 
 const rateConfig = [
@@ -319,35 +383,93 @@ const operationLogs = [
   { time: '2026-06-20 11:00:00', content: '商户进件审核通过', type: 'success' }
 ]
 
-const formatNumber = (num: number) => num.toLocaleString('zh-CN')
-
-const getStatusType = (status: string) => {
-  const map: Record<string, string> = { normal: 'success', pending: 'warning', frozen: 'info', disabled: 'danger' }
-  return map[status] || 'info'
+const formatNumber = (num: number | undefined) => {
+  if (num === null || num === undefined || isNaN(num)) return '0'
+  return num.toLocaleString('zh-CN')
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = { normal: '正常', pending: '待审核', frozen: '已冻结', disabled: '已禁用' }
-  return map[status] || '未知'
+const getStatusType = (status: number | string | undefined) => {
+  if (status === undefined || status === null) return 'info'
+  if (typeof status === 'number') {
+    return merchantStatusMap[status]?.type ?? 'info'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'NORMAL' || statusStr === '1') return 'success'
+  if (statusStr === 'PENDING' || statusStr === '0') return 'warning'
+  if (statusStr === 'FROZEN' || statusStr === '2') return 'info'
+  if (statusStr === 'DISABLED' || statusStr === 'CANCELED' || statusStr === 'REJECTED' || statusStr === '3' || statusStr === '4') return 'danger'
+  return 'info'
+}
+
+const getStatusText = (status: number | string | undefined) => {
+  if (status === undefined || status === null) return '未知'
+  if (typeof status === 'number') {
+    return merchantStatusMap[status]?.text ?? '未知'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'NORMAL') return '正常'
+  if (statusStr === 'PENDING') return '待审核'
+  if (statusStr === 'FROZEN') return '已冻结'
+  if (statusStr === 'DISABLED' || statusStr === 'CANCELED') return '已注销'
+  if (statusStr === 'REJECTED') return '已驳回'
+  return String(status)
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      pageSize: pageSize.value
+    }
+    if (filterForm.merchantName || filterForm.name) {
+      params.merchantName = filterForm.merchantName || filterForm.name
+    }
+    if (filterForm.merchantNo || filterForm.merchantId) {
+      params.merchantNo = filterForm.merchantNo || filterForm.merchantId
+    }
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      params.status = filterForm.status
+    }
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.startTime = filterForm.dateRange[0]
+      params.endTime = filterForm.dateRange[1]
+    }
+    const res = await merchantApi.getList(params)
+    if (res) {
+      tableData.value = res.list ?? []
+      total.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load merchants:', e)
+    tableData.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleSearch = () => {
-  loading.value = true
-  setTimeout(() => loading.value = false, 500)
+  currentPage.value = 1
+  loadData()
 }
 
 const handleReset = () => {
   filterForm.name = ''
   filterForm.merchantId = ''
+  filterForm.merchantName = ''
+  filterForm.merchantNo = ''
   filterForm.status = ''
   filterForm.dateRange = []
+  currentPage.value = 1
+  loadData()
 }
 
-const handleSelectionChange = (rows: any[]) => {
+const handleSelectionChange = (rows: MerchantItem[]) => {
   selectedRows.value = rows
 }
 
-const viewDetail = (row: any) => {
+const viewDetail = (row: MerchantItem) => {
   currentMerchant.value = row
   drawerVisible.value = true
   activeTab.value = 'basic'
@@ -356,7 +478,12 @@ const viewDetail = (row: any) => {
 const handleAddMerchant = () => {
   ElMessage.success('商户创建成功，待审核')
   showAddDialog.value = false
+  loadData()
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style lang="scss" scoped>

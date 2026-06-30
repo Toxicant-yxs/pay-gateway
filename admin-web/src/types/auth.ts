@@ -9,23 +9,24 @@ export interface LoginResponse {
   token: string
   tokenType: string
   expiresIn: number
-  refreshToken: string
   userInfo: UserInfo
 }
 
 export interface UserInfo {
-  userId: string
+  userId: number | string
   username: string
   realName: string
-  role: UserRole
+  roleCode?: string
+  role?: string
   avatar: string
-  email: string
-  phone: string
+  email?: string
+  phone?: string
   department?: string
+  loginTime?: string
   lastLoginTime?: string
+  roles?: string[]
+  permissions?: string[]
 }
-
-export type UserRole = 'SUPER_ADMIN' | 'OPERATOR' | 'RISK_OFFICER' | 'FINANCE' | 'AUDITOR'
 
 export interface UpdatePasswordRequest {
   oldPassword: string

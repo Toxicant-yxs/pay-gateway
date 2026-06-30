@@ -28,7 +28,7 @@ public class AuthController {
         return Result.success(response);
     }
 
-    @GetMapping("/info")
+    @GetMapping({"/info", "/me"})
     @Operation(summary = "获取当前用户信息")
     public Result<LoginUser> getUserInfo() {
         LoginUser user = authService.getCurrentUser();

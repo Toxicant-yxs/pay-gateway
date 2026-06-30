@@ -53,7 +53,7 @@ service.interceptors.response.use(
     const res = response.data
 
     if (res === undefined || res === null) {
-      return response
+      return res
     }
 
     if (res.code === undefined && response.config.responseType === 'blob') {
@@ -128,7 +128,15 @@ service.interceptors.response.use(
 )
 
 export function request<T = any>(config: AxiosRequestConfig): Promise<T> {
-  return service(config) as unknown as Promise<T>
+  return new Promise((resolve, reject) => {
+    service(config)
+      .then((response: any) => {
+        resolve(response as T)
+      })
+      .catch((error: any) => {
+        reject(error)
+      })
+  })
 }
 
 export function get<T = any>(url: string, params?: any, config?: AxiosRequestConfig): Promise<T> {
@@ -147,4 +155,5 @@ export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<
   return request<T>({ method: 'DELETE', url, ...config })
 }
 
-export default service
+export { request as default }
+export const axiosInstance = service

@@ -15,4 +15,7 @@ public class LoginUser implements Serializable {
     private String avatar;
     private String roleCode;
     private LocalDateTime loginTime;
+    private String email;
+    private String phone;
+    private String department;
 }

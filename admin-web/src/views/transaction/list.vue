@@ -149,26 +149,44 @@
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column prop="orderNo" label="订单号" min-width="200" fixed="left">
           <template #default="{ row }">
-            <span class="link-text mono-text" @click="viewDetail(row)">{{ row.orderNo }}</span>
+            <span class="link-text mono-text" @click="viewDetail(row)">{{ row.orderNo ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="merchantOrderNo" label="商户订单号" min-width="180">
+        <el-table-column prop="merchantNo" label="商户号" min-width="140">
           <template #default="{ row }">
-            <span class="mono-text">{{ row.merchantOrderNo }}</span>
+            <span class="mono-text">{{ row.merchantNo ?? row.merchantId ?? '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="merchantName" label="商户名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="channel" label="支付通道" width="110">
+        <el-table-column prop="merchantName" label="商户名称" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" :color="getChannelColor(row.channel)" style="color: #fff; border: none">
-              {{ row.channel }}
+            {{ row.merchantName ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="channelCode" label="支付通道" width="110">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain" :color="getChannelColor(row.channelCode ?? row.channel ?? '')" style="color: #fff; border: none">
+              {{ getChannelName(row.channelCode ?? row.channel ?? '') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="payMethod" label="支付方式" width="100" />
+        <el-table-column prop="payType" label="支付方式" width="100">
+          <template #default="{ row }">
+            {{ getPayTypeName(row.payType ?? row.payMethod ?? '-') }}
+          </template>
+        </el-table-column>
         <el-table-column prop="amount" label="订单金额" width="120" align="right">
           <template #default="{ row }">
-            <span class="amount-text">{{ row.currency }} {{ formatNumber(row.amount) }}</span>
+            <span class="amount-text">{{ formatAmount(row.amount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="actualAmount" label="实付金额" width="120" align="right">
+          <template #default="{ row }">
+            <span class="amount-text">{{ formatAmount(row.actualAmount ?? row.amount) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="fee" label="手续费" width="100" align="right">
+          <template #default="{ row }">
+            <span style="color: var(--warning-color)">{{ formatAmount(row.fee ?? 0) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
@@ -178,13 +196,26 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column prop="payTime" label="支付时间" width="160" />
+        <el-table-column prop="clientIp" label="客户端IP" width="130">
+          <template #default="{ row }">
+            {{ row.clientIp ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="createdAt" label="创建时间" width="160">
+          <template #default="{ row }">
+            {{ row.createdAt ?? row.createTime ?? row.createdTime ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="paidAt" label="支付时间" width="160">
+          <template #default="{ row }">
+            {{ row.paidAt ?? row.payTime ?? '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
             <el-button type="primary" link size="small">回调</el-button>
-            <el-button type="danger" link size="small" v-if="row.status === 'success'">退款</el-button>
+            <el-button type="danger" link size="small" v-if="row.status === 2 || row.status === 'SUCCESS'">退款</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -196,6 +227,8 @@
           :total="total"
           layout="total, sizes, prev, pager, next, jumper"
           background
+          @current-change="loadData"
+          @size-change="loadData"
         />
       </div>
     </div>
@@ -208,52 +241,53 @@
       :destroy-on-close="true"
     >
       <div v-if="currentOrder" class="order-detail">
-        <div class="detail-status-bar" :class="currentOrder.status">
+        <div class="detail-status-bar" :class="getStatusClass(currentOrder.status)">
           <div class="status-icon">
             <el-icon :size="40" color="#fff">
-              <CircleCheck v-if="currentOrder.status === 'success'" />
-              <CircleClose v-else-if="currentOrder.status === 'failed'" />
-              <Clock v-else-if="currentOrder.status === 'pending' || currentOrder.status === 'paying'" />
+              <CircleCheck v-if="currentOrder.status === 2 || currentOrder.status === 'SUCCESS'" />
+              <CircleClose v-else-if="currentOrder.status === 3 || currentOrder.status === 'FAILED'" />
+              <Clock v-else-if="currentOrder.status === 0 || currentOrder.status === 1 || currentOrder.status === 'PENDING' || currentOrder.status === 'PAYING'" />
               <Warning v-else />
             </el-icon>
           </div>
           <div class="status-info">
             <h3>{{ getStatusText(currentOrder.status) }}</h3>
-            <p>订单号：<span class="mono-text">{{ currentOrder.orderNo }}</span></p>
+            <p>订单号：<span class="mono-text">{{ currentOrder.orderNo ?? '-' }}</span></p>
           </div>
         </div>
 
         <el-tabs v-model="activeTab" class="detail-tabs">
           <el-tab-pane label="订单信息" name="order">
             <el-descriptions title="基本信息" :column="2" border class="info-section">
-              <el-descriptions-item label="商户名称">{{ currentOrder.merchantName }}</el-descriptions-item>
+              <el-descriptions-item label="商户名称">{{ currentOrder.merchantName ?? '-' }}</el-descriptions-item>
               <el-descriptions-item label="商户号">
-                <span class="mono-text">{{ currentOrder.merchantId }}</span>
+                <span class="mono-text">{{ currentOrder.merchantNo ?? currentOrder.merchantId ?? '-' }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="商户订单号" :span="2">
-                <span class="mono-text">{{ currentOrder.merchantOrderNo }}</span>
+              <el-descriptions-item label="订单号" :span="2">
+                <span class="mono-text">{{ currentOrder.orderNo ?? '-' }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="订单金额">
-                <span class="amount-text">{{ currentOrder.currency }} {{ formatNumber(currentOrder.amount) }}</span>
+                <span class="amount-text">{{ formatAmount(currentOrder.amount) }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="手续费">
-                <span style="color: var(--warning-color)">{{ currentOrder.currency }} {{ currentOrder.fee }}</span>
+                <span style="color: var(--warning-color)">{{ formatAmount(currentOrder.fee ?? 0) }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="支付通道">{{ currentOrder.channel }}</el-descriptions-item>
-              <el-descriptions-item label="支付方式">{{ currentOrder.payMethod }}</el-descriptions-item>
-              <el-descriptions-item label="创建时间">{{ currentOrder.createTime }}</el-descriptions-item>
-              <el-descriptions-item label="支付时间">{{ currentOrder.payTime || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="过期时间" :span="2">{{ currentOrder.expireTime || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="商品描述" :span="2">{{ currentOrder.subject }}</el-descriptions-item>
+              <el-descriptions-item label="支付通道">{{ getChannelName(currentOrder.channelCode ?? currentOrder.channel ?? '') }}</el-descriptions-item>
+              <el-descriptions-item label="支付方式">{{ getPayTypeName(currentOrder.payType ?? currentOrder.payMethod ?? '-') }}</el-descriptions-item>
+              <el-descriptions-item label="客户端IP">{{ currentOrder.clientIp ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ currentOrder.createdAt ?? currentOrder.createTime ?? currentOrder.createdTime ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="支付时间">{{ currentOrder.paidAt ?? currentOrder.payTime ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="过期时间" :span="2">{{ currentOrder.expireTime ?? '-' }}</el-descriptions-item>
+              <el-descriptions-item label="商品描述" :span="2">{{ currentOrder.subject ?? '-' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           <el-tab-pane label="渠道信息" name="channel">
             <el-descriptions title="渠道返回" :column="1" border class="info-section">
               <el-descriptions-item label="渠道交易号">
-                <span class="mono-text">{{ currentOrder.channelTradeNo || '-' }}</span>
+                <span class="mono-text">{{ currentOrder.channelOrderNo ?? '-' }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="渠道返回码">{{ currentOrder.channelCode || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="渠道返回信息">{{ currentOrder.channelMsg || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="渠道返回码">-</el-descriptions-item>
+              <el-descriptions-item label="渠道返回信息">-</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           <el-tab-pane label="回调记录" name="notify">
@@ -295,7 +329,7 @@
           </el-tab-pane>
         </el-tabs>
 
-        <div class="detail-actions" v-if="currentOrder.status === 'success'">
+        <div class="detail-actions" v-if="currentOrder.status === 2 || currentOrder.status === 'SUCCESS'">
           <el-button type="danger">
             <el-icon><RefreshLeft /></el-icon>
             发起退款
@@ -311,47 +345,95 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { RefreshRight, Download, ArrowDown, Search, Refresh, Warning, CircleCheck, CircleClose, Clock, RefreshLeft, Promotion } from '@element-plus/icons-vue'
+import { tradeApi } from '@/api/transaction'
+import type { TradeOrder } from '@/types/transaction'
 
 const loading = ref(false)
 const showMoreFilter = ref(false)
 const drawerVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(286)
-const selectedRows = ref<any[]>([])
-const currentOrder = ref<any>(null)
+const total = ref(0)
+const selectedRows = ref<TradeOrder[]>([])
+const currentOrder = ref<TradeOrder | null>(null)
 const activeTab = ref('order')
 
 const filterForm = reactive({
   orderNo: '',
   merchantId: '',
+  merchantNo: '',
   channel: '',
-  status: '',
+  channelCode: '',
+  status: '' as number | string,
   payMethod: '',
+  payType: '',
   minAmount: undefined as number | undefined,
   maxAmount: undefined as number | undefined,
   currency: '',
-  dateRange: []
+  dateRange: [] as Date[] | string[]
 })
 
-const statsData = [
-  { label: '今日交易笔数', value: '12,856', color: 'var(--primary-color)' },
-  { label: '今日交易金额', value: '¥2,845,632', color: 'var(--success-color)' },
-  { label: '成功率', value: '99.72%', color: 'var(--success-color)' },
-  { label: '待支付订单', value: '156', color: 'var(--warning-color)' },
-  { label: '支付失败', value: '36', color: 'var(--danger-color)' }
-]
+const tradeStatusMap: Record<number, { text: string; type: string; cls: string }> = {
+  0: { text: '待支付', type: 'info', cls: 'pending' },
+  1: { text: '支付中', type: 'warning', cls: 'paying' },
+  2: { text: '支付成功', type: 'success', cls: 'success' },
+  3: { text: '支付失败', type: 'danger', cls: 'failed' },
+  4: { text: '已关闭', type: 'info', cls: 'closed' },
+  5: { text: '已退款', type: '', cls: 'refunded' },
+  6: { text: '部分退款', type: 'warning', cls: 'refunded' }
+}
 
-const tableData = ref([
-  { orderNo: 'PAY20260628000123456', merchantOrderNo: 'ORD20260628001', merchantName: '星辰电商平台', merchantId: 'M100001', channel: '微信支付', payMethod: 'JSAPI', amount: 29900, currency: 'CNY', fee: 179, status: 'success', createTime: '2026-06-28 14:32:15', payTime: '2026-06-28 14:32:18', subject: 'VIP会员年卡', channelTradeNo: '4200001234202606281234567890', channelCode: 'SUCCESS', channelMsg: '支付成功', traceId: 'abc123def456ghi789' },
-  { orderNo: 'PAY20260628000123455', merchantOrderNo: 'ORD20260628002', merchantName: '云海餐饮连锁', merchantId: 'M100002', channel: '支付宝', payMethod: '手机网站', amount: 128000, currency: 'CNY', fee: 704, status: 'success', createTime: '2026-06-28 14:31:42', payTime: '2026-06-28 14:31:45', subject: '团建聚餐费用', channelTradeNo: '2026062822001234567890123456', channelCode: '10000', channelMsg: 'Success', traceId: 'def456ghi789abc123' },
-  { orderNo: 'PAY20260628000123454', merchantOrderNo: 'ORD20260628003', merchantName: '某跨境电商', merchantId: 'M100007', channel: 'Visa/MC', payMethod: '信用卡', amount: 56800, currency: 'CNY', fee: 1704, status: 'paying', createTime: '2026-06-28 14:31:08', payTime: null, subject: '跨境商品订单', channelTradeNo: null, channelCode: null, channelMsg: null, traceId: 'ghi789abc123def456' },
-  { orderNo: 'PAY20260628000123453', merchantOrderNo: 'ORD20260628004', merchantName: '智学在线教育', merchantId: 'M100003', channel: '微信支付', payMethod: 'H5', amount: 9900, currency: 'CNY', fee: 59, status: 'success', createTime: '2026-06-28 14:30:55', payTime: '2026-06-28 14:31:02', subject: '精品课程购买', channelTradeNo: '4200001234202606281234567891', channelCode: 'SUCCESS', channelMsg: '支付成功', traceId: 'jkl012mno345pqr678' },
-  { orderNo: 'PAY20260628000123452', merchantOrderNo: 'ORD20260628005', merchantName: '速达出行科技', merchantId: 'M100004', channel: '银联支付', payMethod: '云闪付', amount: 156000, currency: 'CNY', fee: 780, status: 'failed', createTime: '2026-06-28 14:30:33', payTime: null, subject: '企业用车充值', channelTradeNo: null, channelCode: 'TIMEOUT', channelMsg: '渠道响应超时', traceId: 'mno345pqr678stu901' },
-  { orderNo: 'PAY20260628000123451', merchantOrderNo: 'ORD20260628006', merchantName: '趣玩数字娱乐', merchantId: 'M100005', channel: '支付宝', payMethod: '电脑网站', amount: 45600, currency: 'CNY', fee: 251, status: 'success', createTime: '2026-06-28 14:30:12', payTime: '2026-06-28 14:30:18', subject: '游戏充值', channelTradeNo: '2026062822001234567890123457', channelCode: '10000', channelMsg: 'Success', traceId: 'pqr678stu901vwx234' }
+const channelColors: Record<string, string> = {
+  wechat: '#07C160',
+  WECHAT: '#07C160',
+  alipay: '#1677FF',
+  ALIPAY: '#1677FF',
+  unionpay: '#E60012',
+  UNIONPAY: '#E60012',
+  visa: '#1A1F71',
+  VISA: '#1A1F71',
+  dcb: '#D4382F',
+  DCB: '#D4382F',
+  '微信支付': '#07C160',
+  '支付宝': '#1677FF',
+  '银联支付': '#E60012',
+  'Visa/MC': '#1A1F71'
+}
+
+const channelNameMap: Record<string, string> = {
+  wechat: '微信支付',
+  WECHAT: '微信支付',
+  alipay: '支付宝',
+  ALIPAY: '支付宝',
+  unionpay: '银联支付',
+  UNIONPAY: '银联支付',
+  visa: 'Visa/MC',
+  VISA: 'Visa/MC',
+  dcb: '数字人民币',
+  DCB: '数字人民币'
+}
+
+const payTypeMap: Record<string, string> = {
+  JSAPI: 'JSAPI',
+  NATIVE: 'Native',
+  H5: 'H5',
+  APP: 'APP',
+  PC: '电脑网站',
+  CREDIT_CARD: '信用卡',
+  CLOUD_FAST: '云闪付'
+}
+
+const statsData = ref([
+  { label: '今日交易笔数', value: '--', color: 'var(--primary-color)' },
+  { label: '今日交易金额', value: '--', color: 'var(--success-color)' },
+  { label: '成功率', value: '--', color: 'var(--success-color)' },
+  { label: '待支付订单', value: '--', color: 'var(--warning-color)' },
+  { label: '支付失败', value: '--', color: 'var(--danger-color)' }
 ])
+
+const tableData = ref<TradeOrder[]>([])
 
 const notifyRecords = [
   { time: '2026-06-28 14:32:20', success: true, duration: 45 },
@@ -364,50 +446,140 @@ const traceSteps = [
   { name: '风控引擎校验', time: '2026-06-28 14:32:15.125', duration: 3 },
   { name: '智能路由决策', time: '2026-06-28 14:32:15.128', duration: 1 },
   { name: '订单服务创建订单', time: '2026-06-28 14:32:15.129', duration: 12 },
-  { name: '微信支付渠道适配', time: '2026-06-28 14:32:15.141', duration: 8 },
-  { name: '调用微信下单接口', time: '2026-06-28 14:32:15.149', duration: 256 },
+  { name: '渠道适配处理', time: '2026-06-28 14:32:15.141', duration: 8 },
+  { name: '调用渠道下单接口', time: '2026-06-28 14:32:15.149', duration: 256 },
   { name: '接收支付结果回调', time: '2026-06-28 14:32:18.405', duration: 5 },
   { name: '更新订单状态', time: '2026-06-28 14:32:18.410', duration: 18 },
   { name: '异步通知商户', time: '2026-06-28 14:32:18.428', duration: 45 }
 ]
 
-const formatNumber = (num: number) => (num / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
-
-const getChannelColor = (channel: string) => {
-  const map: Record<string, string> = { '微信支付': '#07C160', '支付宝': '#1677FF', '银联支付': '#E60012', 'Visa/MC': '#1A1F71' }
-  return map[channel] || 'var(--primary-color)'
+function formatAmount(amount: number | undefined | null): string {
+  if (amount === null || amount === undefined || isNaN(amount as number)) return '¥0.00'
+  return '¥' + (amount / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getStatusType = (status: string) => {
-  const map: Record<string, string> = { success: 'success', pending: 'info', paying: 'warning', failed: 'danger', closed: 'info', refunded: '' }
-  return map[status] || 'info'
+function getChannelName(code: string): string {
+  if (!code) return '-'
+  return channelNameMap[code] ?? code
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = { success: '支付成功', pending: '待支付', paying: '支付中', failed: '支付失败', closed: '已关闭', refunded: '已退款' }
-  return map[status] || '未知'
+function getChannelColor(channel: string): string {
+  if (!channel) return 'var(--primary-color)'
+  return channelColors[channel] ?? 'var(--primary-color)'
+}
+
+function getPayTypeName(payType: string): string {
+  if (!payType) return '-'
+  return payTypeMap[payType.toUpperCase()] ?? payType
+}
+
+function getStatusType(status: number | string | undefined) {
+  if (status === undefined || status === null) return 'info'
+  if (typeof status === 'number') {
+    return tradeStatusMap[status]?.type ?? 'info'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'SUCCESS' || statusStr === '2') return 'success'
+  if (statusStr === 'PAYING' || statusStr === 'PROCESSING' || statusStr === '1') return 'warning'
+  if (statusStr === 'FAILED' || statusStr === 'FAIL' || statusStr === '3') return 'danger'
+  if (statusStr === 'PENDING' || statusStr === '0') return 'info'
+  if (statusStr === 'CLOSED' || statusStr === '4') return 'info'
+  if (statusStr === 'REFUNDED' || statusStr === '5') return ''
+  if (statusStr === 'PARTIAL_REFUNDED' || statusStr === '6') return 'warning'
+  return 'info'
+}
+
+function getStatusText(status: number | string | undefined) {
+  if (status === undefined || status === null) return '未知'
+  if (typeof status === 'number') {
+    return tradeStatusMap[status]?.text ?? '未知'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'SUCCESS') return '支付成功'
+  if (statusStr === 'PAYING' || statusStr === 'PROCESSING') return '支付中'
+  if (statusStr === 'FAILED' || statusStr === 'FAIL') return '支付失败'
+  if (statusStr === 'PENDING') return '待支付'
+  if (statusStr === 'CLOSED') return '已关闭'
+  if (statusStr === 'REFUNDED') return '已退款'
+  if (statusStr === 'PARTIAL_REFUNDED') return '部分退款'
+  return String(status)
+}
+
+function getStatusClass(status: number | string | undefined) {
+  if (status === undefined || status === null) return 'pending'
+  if (typeof status === 'number') {
+    return tradeStatusMap[status]?.cls ?? 'pending'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'SUCCESS') return 'success'
+  if (statusStr === 'FAILED') return 'failed'
+  if (statusStr === 'PENDING') return 'pending'
+  if (statusStr === 'PAYING') return 'paying'
+  if (statusStr === 'CLOSED') return 'closed'
+  if (statusStr === 'REFUNDED' || statusStr === 'PARTIAL_REFUNDED') return 'refunded'
+  return 'pending'
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      pageSize: pageSize.value
+    }
+    if (filterForm.orderNo) params.orderNo = filterForm.orderNo
+    if (filterForm.merchantNo || filterForm.merchantId) params.merchantNo = filterForm.merchantNo || filterForm.merchantId
+    if (filterForm.channelCode || filterForm.channel) params.channelCode = filterForm.channelCode || filterForm.channel
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      params.status = filterForm.status
+    }
+    if (filterForm.payType || filterForm.payMethod) params.payType = filterForm.payType || filterForm.payMethod
+    if (filterForm.minAmount !== undefined) params.minAmount = filterForm.minAmount
+    if (filterForm.maxAmount !== undefined) params.maxAmount = filterForm.maxAmount
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.startTime = filterForm.dateRange[0]
+      params.endTime = filterForm.dateRange[1]
+    }
+    const res = await tradeApi.getList(params)
+    if (res) {
+      tableData.value = res.list ?? []
+      total.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load trade orders:', e)
+    tableData.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleSearch = () => {
-  loading.value = true
-  setTimeout(() => loading.value = false, 500)
+  currentPage.value = 1
+  loadData()
 }
 
 const handleReset = () => {
   Object.keys(filterForm).forEach(key => {
-    (filterForm as any)[key] = key === 'dateRange' ? [] : undefined
+    (filterForm as any)[key] = key === 'dateRange' ? [] : (key === 'minAmount' || key === 'maxAmount') ? undefined : ''
   })
+  currentPage.value = 1
+  loadData()
 }
 
-const handleSelectionChange = (rows: any[]) => {
+const handleSelectionChange = (rows: TradeOrder[]) => {
   selectedRows.value = rows
 }
 
-const viewDetail = (row: any) => {
+const viewDetail = (row: TradeOrder) => {
   currentOrder.value = row
   drawerVisible.value = true
   activeTab.value = 'order'
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style lang="scss" scoped>

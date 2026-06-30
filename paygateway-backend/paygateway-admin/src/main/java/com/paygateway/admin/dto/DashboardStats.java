@@ -9,7 +9,11 @@ public class DashboardStats {
 
     private BigDecimal todayAmount;
 
+    private BigDecimal todayAmountGrowth;
+
     private Long todayCount;
+
+    private BigDecimal todayCountGrowth;
 
     private BigDecimal todayRefundAmount;
 
@@ -21,5 +25,9 @@ public class DashboardStats {
 
     private BigDecimal successRate;
 
+    private BigDecimal successRateChange;
+
     private Long avgLatency;
+
+    private BigDecimal avgResponseTimeChange;
 }

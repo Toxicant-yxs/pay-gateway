@@ -6,37 +6,50 @@ export interface TradeStatistics {
 }
 
 export interface TradeOrder {
-  id: string
+  id?: string
   orderNo: string
-  merchantId: string
-  merchantNo: string
-  merchantName: string
-  channelCode: ChannelCode
-  channelName: string
+  merchantId?: string
+  merchantNo?: string
+  merchantName?: string
+  channelCode?: ChannelCode | string
+  channelName?: string
+  channel?: string
   channelOrderNo?: string
-  payType: PayType
+  payType?: PayType | string
+  payMethod?: string
   amount: number
-  fee: number
-  currency: string
-  status: TradeStatus
-  subject: string
-  clientIp: string
-  createdAt: string
+  actualAmount?: number
+  fee?: number
+  currency?: string
+  status: number | TradeStatus
+  subject?: string
+  clientIp?: string
+  createdAt?: string
+  createdTime?: string
+  createTime?: string
   paidAt?: string
-  expireTime: string
+  payTime?: string
+  expireTime?: string
+  traceId?: string
+  channelTradeNo?: string
+  channelMsg?: string
+  channelCode_resp?: string
 }
 
-export type TradeStatus = 'PAYING' | 'SUCCESS' | 'FAILED' | 'CLOSED' | 'REFUNDED' | 'PARTIAL_REFUNDED'
-export type PayType = 'JSAPI' | 'NATIVE' | 'H5' | 'APP' | 'PC' | 'CREDIT_CARD' | 'CLOUD_FAST'
-export type ChannelCode = 'WECHAT' | 'ALIPAY' | 'UNIONPAY' | 'VISA' | 'DCB'
+export type TradeStatus = 'PENDING' | 'PAYING' | 'SUCCESS' | 'FAILED' | 'CLOSED' | 'REFUNDED' | 'PARTIAL_REFUNDED' | number
+export type PayType = 'JSAPI' | 'NATIVE' | 'H5' | 'APP' | 'PC' | 'CREDIT_CARD' | 'CLOUD_FAST' | string
+export type ChannelCode = 'WECHAT' | 'ALIPAY' | 'UNIONPAY' | 'VISA' | 'DCB' | string
 
 export interface TradeQuery {
   orderNo?: string
   merchantId?: string
+  merchantNo?: string
   merchantName?: string
-  channelCode?: ChannelCode | ''
-  status?: TradeStatus | ''
-  payType?: PayType | ''
+  channelCode?: ChannelCode | string
+  channel?: string
+  status?: number | TradeStatus | ''
+  payType?: PayType | string
+  payMethod?: string
   startTime?: string
   endTime?: string
   minAmount?: number

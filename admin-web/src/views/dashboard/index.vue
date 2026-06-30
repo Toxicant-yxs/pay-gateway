@@ -213,27 +213,66 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import {
   Download, TrendCharts, Bottom, Bell, Connection, PieChart, List, ArrowRight,
   Wallet, CreditCard, CircleCheck, Timer
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import { dashboardApi } from '@/api/dashboard'
+import type { DashboardStatistics, TrendData, ChannelStatusItem, AlertItem, RecentTrade } from '@/types/dashboard'
 
 const dateRange = ref<[Date, Date]>([dayjs().subtract(7, 'day').toDate(), new Date()])
-const chartPeriod = ref('24h')
-const distributionType = ref('channel')
+const chartPeriod = ref<'1h' | '24h' | '7d'>('24h')
+const distributionType = ref<'channel' | 'currency'>('channel')
 const trendChartRef = ref<HTMLElement>()
 const pieChartRef = ref<HTMLElement>()
 let trendChart: echarts.ECharts | null = null
 let pieChart: echarts.ECharts | null = null
 
-const metrics = ref([
+const statistics = ref<DashboardStatistics>({
+  todayAmount: 0,
+  todayAmountGrowth: 0,
+  todayCount: 0,
+  todayCountGrowth: 0,
+  successRate: 0,
+  successRateChange: 0,
+  avgLatency: 0,
+  avgLatencyChange: 0
+})
+
+const channelColors: Record<string, string> = {
+  wechat: '#07C160',
+  WECHAT: '#07C160',
+  alipay: '#1677FF',
+  ALIPAY: '#1677FF',
+  unionpay: '#E60012',
+  UNIONPAY: '#E60012',
+  visa: '#1A1F71',
+  VISA: '#1A1F71',
+  dcb: '#D4382F',
+  DCB: '#D4382F'
+}
+
+const channelNameMap: Record<string, string> = {
+  wechat: '微信支付',
+  WECHAT: '微信支付',
+  alipay: '支付宝',
+  ALIPAY: '支付宝',
+  unionpay: '银联支付',
+  UNIONPAY: '银联支付',
+  visa: 'Visa/MC',
+  VISA: 'Visa/MC',
+  dcb: '数字人民币',
+  DCB: '数字人民币'
+}
+
+const metrics = computed(() => [
   {
     label: '今日交易额',
-    value: '¥12,845,632',
-    trend: 12.5,
+    value: '¥' + formatNumber(statistics.value.todayAmount ?? 0),
+    trend: statistics.value.todayAmountGrowth ?? 0,
     type: '',
     icon: Wallet,
     iconBg: 'var(--primary-bg)',
@@ -241,8 +280,8 @@ const metrics = ref([
   },
   {
     label: '交易笔数',
-    value: '86,429',
-    trend: 8.3,
+    value: formatNumber(statistics.value.todayCount ?? 0),
+    trend: statistics.value.todayCountGrowth ?? 0,
     type: 'success',
     icon: CreditCard,
     iconBg: 'var(--success-bg)',
@@ -250,8 +289,8 @@ const metrics = ref([
   },
   {
     label: '支付成功率',
-    value: '99.72%',
-    trend: -0.15,
+    value: (statistics.value.successRate ?? 0).toFixed(2) + '%',
+    trend: statistics.value.successRateChange ?? 0,
     type: 'warning',
     icon: CircleCheck,
     iconBg: 'var(--warning-bg)',
@@ -259,8 +298,8 @@ const metrics = ref([
   },
   {
     label: '平均响应时间',
-    value: '38ms',
-    trend: -5.2,
+    value: Math.round(statistics.value.avgLatency ?? 0) + 'ms',
+    trend: -(statistics.value.avgLatencyChange ?? 0),
     type: '',
     icon: Timer,
     iconBg: 'var(--purple-bg)',
@@ -268,64 +307,141 @@ const metrics = ref([
   }
 ])
 
-const alerts = ref([
-  { level: 'danger', title: '银联通道响应超时率超过5%', time: '2分钟前' },
-  { level: 'warning', title: '风控拦截规则触发：IP异常高频访问', time: '5分钟前' },
-  { level: 'warning', title: '商户M10086日交易量超预警阈值', time: '12分钟前' },
-  { level: 'info', title: '自动对账完成，差异笔数0笔', time: '30分钟前' },
-  { level: 'info', title: '微信支付版本更新通知', time: '1小时前' }
-])
+const alerts = ref<Array<{ level: string; title: string; time: string }>>([])
 
-const channels = ref([
-  { name: '微信支付', desc: 'Native/JSAPI/H5', status: 'normal', successRate: 99.89, latency: 32, qps: 1256, color: '#07C160' },
-  { name: '支付宝', desc: '电脑网站/手机网站', status: 'normal', successRate: 99.92, latency: 28, qps: 1089, color: '#1677FF' },
-  { name: '银联支付', desc: '银联在线/云闪付', status: 'warning', successRate: 97.56, latency: 86, qps: 425, color: '#E60012' },
-  { name: 'Visa/MC', desc: '国际信用卡', status: 'normal', successRate: 99.21, latency: 156, qps: 234, color: '#1A1F71' }
-])
+const channels = ref<Array<{ name: string; desc: string; status: string; successRate: number; latency: number; qps: number; color: string }>>([])
 
 const distributionData = ref([
-  { name: '微信支付', value: 38.5, amount: 4945568, color: '#07C160' },
-  { name: '支付宝', value: 35.2, amount: 4521663, color: '#1677FF' },
-  { name: '银联支付', value: 15.8, amount: 2029610, color: '#E60012' },
-  { name: 'Visa/MC', value: 10.5, amount: 1348791, color: '#1A1F71' }
+  { name: '微信支付', value: 0, amount: 0, color: '#07C160' },
+  { name: '支付宝', value: 0, amount: 0, color: '#1677FF' },
+  { name: '银联支付', value: 0, amount: 0, color: '#E60012' },
+  { name: 'Visa/MC', value: 0, amount: 0, color: '#1A1F71' }
 ])
 
-const recentTransactions = ref([
-  { orderNo: 'PAY20260628000123456', merchant: '某电商平台', channel: '微信支付', amount: 29900, payMethod: 'JSAPI', status: '支付成功', time: '2026-06-28 14:32:15' },
-  { orderNo: 'PAY20260628000123455', merchant: '某SaaS服务商', channel: '支付宝', amount: 128000, payMethod: '电脑网站', status: '支付成功', time: '2026-06-28 14:31:42' },
-  { orderNo: 'PAY20260628000123454', merchant: '某跨境电商', channel: 'Visa/MC', amount: 56800, payMethod: '信用卡', status: '支付中', time: '2026-06-28 14:31:08' },
-  { orderNo: 'PAY20260628000123453', merchant: '某在线教育', channel: '微信支付', amount: 9900, payMethod: 'H5', status: '支付成功', time: '2026-06-28 14:30:55' },
-  { orderNo: 'PAY20260628000123452', merchant: '某零售连锁', channel: '银联支付', amount: 156000, payMethod: '云闪付', status: '支付失败', time: '2026-06-28 14:30:33' },
-  { orderNo: 'PAY20260628000123451', merchant: '某出行平台', channel: '支付宝', amount: 45600, payMethod: '手机网站', status: '支付成功', time: '2026-06-28 14:30:12' }
-])
+const recentTransactions = ref<Array<{ orderNo: string; merchant: string; channel: string; amount: number; payMethod: string; status: string; time: string; statusCode: number | string }>>([])
 
-const formatNumber = (num: number) => {
+const tradeStatusMap: Record<number, { text: string; type: string }> = {
+  0: { text: '待支付', type: 'info' },
+  1: { text: '支付中', type: 'warning' },
+  2: { text: '支付成功', type: 'success' },
+  3: { text: '支付失败', type: 'danger' },
+  4: { text: '已关闭', type: 'info' },
+  5: { text: '已退款', type: '' },
+  6: { text: '部分退款', type: 'warning' }
+}
+
+const alertLevelMap: Record<string, string> = {
+  HIGH: 'danger',
+  high: 'danger',
+  MEDIUM: 'warning',
+  medium: 'warning',
+  LOW: 'info',
+  low: 'info'
+}
+
+function formatNumber(num: number) {
+  if (num === null || num === undefined || isNaN(num)) return '0'
   return num.toLocaleString('zh-CN')
 }
 
-const getStatusType = (status: string) => {
-  if (status === '支付成功') return 'success'
-  if (status === '支付失败') return 'danger'
-  if (status === '支付中') return 'warning'
+function getStatusType(status: number | string) {
+  if (typeof status === 'number') {
+    return tradeStatusMap[status]?.type ?? 'info'
+  }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'SUCCESS' || statusStr === '2' || status === '支付成功') return 'success'
+  if (statusStr === 'FAILED' || statusStr === 'FAIL' || statusStr === '3' || status === '支付失败') return 'danger'
+  if (statusStr === 'PAYING' || statusStr === 'PROCESSING' || statusStr === '1' || status === '支付中') return 'warning'
   return 'info'
 }
 
-const initTrendChart = () => {
-  if (!trendChartRef.value) return
-  trendChart = echarts.init(trendChartRef.value)
-
-  const hours = Array.from({ length: 24 }, (_, i) => `${i}:00`)
-  const successData = []
-  const failData = []
-  const amountData = []
-
-  for (let i = 0; i < 24; i++) {
-    const base = 2000 + Math.sin(i / 4) * 1500 + Math.random() * 800
-    const fail = Math.floor(base * 0.005 + Math.random() * 20)
-    successData.push(Math.floor(base))
-    failData.push(fail)
-    amountData.push(Math.floor(base * (150 + Math.random() * 100)))
+function getStatusText(status: number | string) {
+  if (typeof status === 'number') {
+    return tradeStatusMap[status]?.text ?? '未知'
   }
+  const statusStr = String(status).toUpperCase()
+  if (statusStr === 'SUCCESS') return '支付成功'
+  if (statusStr === 'FAILED' || statusStr === 'FAIL') return '支付失败'
+  if (statusStr === 'PAYING' || statusStr === 'PROCESSING') return '支付中'
+  if (statusStr === 'PENDING' || statusStr === '0') return '待支付'
+  if (statusStr === 'CLOSED' || statusStr === '4') return '已关闭'
+  if (statusStr === 'REFUNDED' || statusStr === '5') return '已退款'
+  if (statusStr === 'PARTIAL_REFUNDED' || statusStr === '6') return '部分退款'
+  return String(status)
+}
+
+function getChannelName(code: string) {
+  return channelNameMap[code] ?? code ?? '未知通道'
+}
+
+function getChannelColor(code: string) {
+  return channelColors[code] ?? 'var(--primary-color)'
+}
+
+function parsePayTypes(payTypes: string | string[] | undefined): string[] {
+  if (!payTypes) return []
+  if (Array.isArray(payTypes)) return payTypes
+  return String(payTypes).split(',').map(t => t.trim()).filter(Boolean)
+}
+
+function getChannelStatus(status: number | string | undefined): 'normal' | 'warning' | 'danger' {
+  if (status === 1 || status === 'NORMAL' || status === '1') return 'normal'
+  const rate = 0
+  if (typeof status === 'number' && status === 0) return 'danger'
+  return 'warning'
+}
+
+function formatAlertTime(time: string | undefined): string {
+  if (!time) return '刚刚'
+  const now = dayjs()
+  const t = dayjs(time)
+  const diffMin = now.diff(t, 'minute')
+  if (diffMin < 1) return '刚刚'
+  if (diffMin < 60) return `${diffMin}分钟前`
+  const diffHour = now.diff(t, 'hour')
+  if (diffHour < 24) return `${diffHour}小时前`
+  const diffDay = now.diff(t, 'day')
+  if (diffDay < 30) return `${diffDay}天前`
+  return t.format('YYYY-MM-DD HH:mm')
+}
+
+async function loadStatistics() {
+  try {
+    const data = await dashboardApi.getStatistics()
+    if (data) {
+      statistics.value = {
+        todayAmount: data.todayAmount ?? 0,
+        todayAmountGrowth: data.todayAmountGrowth ?? 0,
+        todayCount: data.todayCount ?? 0,
+        todayCountGrowth: data.todayCountGrowth ?? 0,
+        successRate: data.successRate ?? 0,
+        successRateChange: data.successRateChange ?? 0,
+        avgLatency: data.avgLatency ?? 0,
+        avgLatencyChange: data.avgLatencyChange ?? 0
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load statistics:', e)
+  }
+}
+
+async function loadTrend() {
+  try {
+    const data = await dashboardApi.getTrend({ type: chartPeriod.value })
+    if (data) {
+      updateTrendChart(data)
+    }
+  } catch (e) {
+    console.error('Failed to load trend:', e)
+  }
+}
+
+function updateTrendChart(data: TrendData) {
+  if (!trendChart) return
+  const xAxisData = data.xAxis ?? data.xaxis ?? []
+  const successCount = data.successCount ?? []
+  const failCount = data.failCount ?? []
+  const successAmount = data.successAmount ?? []
 
   const option = {
     tooltip: {
@@ -351,7 +467,7 @@ const initTrendChart = () => {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: hours,
+      data: xAxisData.length > 0 ? xAxisData : Array.from({ length: 24 }, (_, i) => `${i}:00`),
       axisLine: { lineStyle: { color: 'var(--border-color)' } },
       axisLabel: { color: 'var(--text-secondary)' }
     },
@@ -382,7 +498,7 @@ const initTrendChart = () => {
             { offset: 1, color: 'rgba(22, 93, 255, 0.02)' }
           ])
         },
-        data: successData
+        data: successCount.length > 0 ? successCount : [0]
       },
       {
         name: '失败笔数',
@@ -390,7 +506,7 @@ const initTrendChart = () => {
         smooth: true,
         symbol: 'none',
         lineStyle: { width: 2, color: '#F53F3F' },
-        data: failData
+        data: failCount.length > 0 ? failCount : [0]
       },
       {
         name: '交易金额',
@@ -399,18 +515,186 @@ const initTrendChart = () => {
         symbol: 'none',
         yAxisIndex: 1,
         lineStyle: { width: 2, color: '#00B42A' },
-        data: amountData.map(v => Math.floor(v / 10000))
+        data: successAmount.length > 0 ? successAmount.map((v: number) => Math.floor((v ?? 0) / 10000)) : [0]
       }
     ]
   }
+  trendChart.setOption(option, true)
+}
 
+async function loadChannels() {
+  try {
+    const data = await dashboardApi.getChannelStatus()
+    if (Array.isArray(data)) {
+      channels.value = data.map((ch: ChannelStatusItem) => {
+        const chName = getChannelName(ch.channelCode ?? '')
+        const payTypesArr = parsePayTypes(ch.payTypes)
+        const successRate = ch.avgSuccessRate ?? ch.successRate ?? 0
+        let status: 'normal' | 'warning' | 'danger' = 'normal'
+        if (ch.status === 0 || ch.status === 'DISABLED' || ch.status === 'ABNORMAL') {
+          status = 'danger'
+        } else if (successRate < 97) {
+          status = 'warning'
+        }
+        return {
+          name: ch.channelName ?? chName,
+          desc: payTypesArr.slice(0, 3).join('/') || '多种支付方式',
+          status,
+          successRate: Number(successRate?.toFixed(2) ?? 0),
+          latency: Math.round(ch.avgLatency ?? 0),
+          qps: ch.dailyCount ?? ch.qps ?? 0,
+          color: getChannelColor(ch.channelCode ?? '')
+        }
+      })
+      if (channels.value.length === 0) {
+        channels.value = [
+          { name: '微信支付', desc: 'Native/JSAPI/H5', status: 'normal', successRate: 99.89, latency: 32, qps: 0, color: '#07C160' },
+          { name: '支付宝', desc: '电脑网站/手机网站', status: 'normal', successRate: 99.92, latency: 28, qps: 0, color: '#1677FF' }
+        ]
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load channels:', e)
+    channels.value = [
+      { name: '微信支付', desc: 'Native/JSAPI/H5', status: 'normal', successRate: 99.89, latency: 32, qps: 0, color: '#07C160' },
+      { name: '支付宝', desc: '电脑网站/手机网站', status: 'normal', successRate: 99.92, latency: 28, qps: 0, color: '#1677FF' }
+    ]
+  }
+}
+
+async function loadAlerts() {
+  try {
+    const data = await dashboardApi.getAlerts({ page: 1, pageSize: 10 })
+    if (data && Array.isArray(data.list)) {
+      alerts.value = data.list.map((alert: AlertItem) => ({
+        level: alertLevelMap[alert.level] ?? 'info',
+        title: alert.title ?? alert.message ?? alert.content ?? '系统通知',
+        time: formatAlertTime(alert.createdAt ?? alert.createdTime ?? alert.time)
+      }))
+    }
+    if (alerts.value.length === 0) {
+      alerts.value = [
+        { level: 'info', title: '系统运行正常', time: '刚刚' }
+      ]
+    }
+  } catch (e) {
+    console.error('Failed to load alerts:', e)
+    alerts.value = [
+      { level: 'info', title: '系统运行正常', time: '刚刚' }
+    ]
+  }
+}
+
+async function loadRecentTransactions() {
+  try {
+    const data = await dashboardApi.getRecentTransactions({ limit: 10 })
+    if (Array.isArray(data)) {
+      recentTransactions.value = data.map((trade: RecentTrade) => {
+        const channelCode = trade.channelCode ?? trade.channel ?? ''
+        const payMethod = trade.payType ?? trade.payMethod ?? '-'
+        return {
+          orderNo: trade.orderNo ?? '-',
+          merchant: trade.merchantName ?? trade.merchantNo ?? '未知商户',
+          channel: getChannelName(channelCode),
+          amount: trade.amount ?? 0,
+          payMethod,
+          status: getStatusText(trade.status),
+          time: trade.createdAt ?? trade.createdTime ?? trade.time ?? '-',
+          statusCode: trade.status
+        }
+      })
+    }
+  } catch (e) {
+    console.error('Failed to load recent transactions:', e)
+    recentTransactions.value = []
+  }
+}
+
+function initTrendChart() {
+  if (!trendChartRef.value) return
+  trendChart = echarts.init(trendChartRef.value)
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: 'var(--border-color)',
+      textStyle: { color: 'var(--text-primary)' },
+      axisPointer: { type: 'cross' }
+    },
+    legend: {
+      data: ['成功笔数', '失败笔数', '交易金额'],
+      top: 0,
+      right: 0,
+      textStyle: { color: 'var(--text-regular)' }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '40px',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+      axisLine: { lineStyle: { color: 'var(--border-color)' } },
+      axisLabel: { color: 'var(--text-secondary)' }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '笔数',
+        splitLine: { lineStyle: { color: 'var(--border-light)', type: 'dashed' } },
+        axisLabel: { color: 'var(--text-secondary)' }
+      },
+      {
+        type: 'value',
+        name: '金额(万)',
+        splitLine: { show: false },
+        axisLabel: { color: 'var(--text-secondary)' }
+      }
+    ],
+    series: [
+      {
+        name: '成功笔数',
+        type: 'line',
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#165DFF' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(22, 93, 255, 0.25)' },
+            { offset: 1, color: 'rgba(22, 93, 255, 0.02)' }
+          ])
+        },
+        data: [0]
+      },
+      {
+        name: '失败笔数',
+        type: 'line',
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { width: 2, color: '#F53F3F' },
+        data: [0]
+      },
+      {
+        name: '交易金额',
+        type: 'line',
+        smooth: true,
+        symbol: 'none',
+        yAxisIndex: 1,
+        lineStyle: { width: 2, color: '#00B42A' },
+        data: [0]
+      }
+    ]
+  }
   trendChart.setOption(option)
 }
 
-const initPieChart = () => {
+function initPieChart() {
   if (!pieChartRef.value) return
   pieChart = echarts.init(pieChartRef.value)
-
   const option = {
     tooltip: {
       trigger: 'item',
@@ -445,27 +729,42 @@ const initPieChart = () => {
         },
         labelLine: { show: false },
         data: distributionData.value.map(item => ({
-          value: item.value,
+          value: item.value || 25,
           name: item.name,
           itemStyle: { color: item.color }
         }))
       }
     ]
   }
-
   pieChart.setOption(option)
 }
+
+function handleResize() {
+  trendChart?.resize()
+  pieChart?.resize()
+}
+
+watch(chartPeriod, () => {
+  loadTrend()
+})
 
 onMounted(() => {
   nextTick(() => {
     initTrendChart()
     initPieChart()
-
-    window.addEventListener('resize', () => {
-      trendChart?.resize()
-      pieChart?.resize()
-    })
+    loadStatistics()
+    loadTrend()
+    loadChannels()
+    loadAlerts()
+    loadRecentTransactions()
+    window.addEventListener('resize', handleResize)
   })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChart?.dispose()
+  pieChart?.dispose()
 })
 </script>
 
