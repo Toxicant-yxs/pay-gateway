@@ -353,36 +353,6 @@ graph TB
 
 ```mermaid
 erDiagram
-    MERCHANT ||--o{ MERCHANT_STORE : has
-    MERCHANT ||--o{ MERCHANT_RATE : has
-    MERCHANT ||--o{ TRADE_ORDER : creates
-    MERCHANT ||--o{ REFUND_ORDER : creates
-    MERCHANT ||--o{ MERCHANT_SETTLE : has
-
-    CHANNEL ||--o{ CHANNEL_CONFIG : has
-    CHANNEL ||--o{ CHANNEL_RATE : has
-    CHANNEL ||--o{ CHANNEL_ROUTE_RULE : used_by
-
-    TRADE_ORDER ||--o{ TRADE_LOG : has
-    TRADE_ORDER ||--o| REFUND_ORDER : may_have
-    TRADE_ORDER }o--|| CHANNEL : uses
-    TRADE_ORDER }o--|| ROUTE_RECORD : records
-
-    ROUTE_RULE ||--o{ ROUTE_TARGET : has
-
-    RISK_RULE ||--o{ RISK_EVENT : triggers
-    BLACKLIST }o--o{ RISK_EVENT : involved
-
-    RECON_TASK ||--o{ RECON_DETAIL : contains
-    RECON_TASK }o--|| CHANNEL : against
-
-    SYS_USER ||--o{ SYS_ROLE : has
-    SYS_ROLE ||--o{ SYS_PERMISSION : has
-    SYS_USER ||--o{ OPERATION_LOG : produces
-
-    NOTIFY_RECORD }o--|| TRADE_ORDER : for
-    NOTIFY_RECORD }o--|| MERCHANT : to
-
     MERCHANT {
         bigint id PK
         varchar merchant_no UK
@@ -523,6 +493,18 @@ erDiagram
         datetime last_notify_time
         datetime created_at
     }
+
+    MERCHANT ||--o{ TRADE_ORDER : creates
+    MERCHANT ||--o{ REFUND_ORDER : creates
+    CHANNEL ||--o{ TRADE_ORDER : processes
+    TRADE_ORDER ||--o| REFUND_ORDER : may_have
+    ROUTE_RULE ||--o{ ROUTE_TARGET : has
+    CHANNEL ||--o{ ROUTE_TARGET : routes_to
+    RISK_RULE ||--o{ RISK_EVENT : triggers
+    TRADE_ORDER ||--o| RISK_EVENT : may_trigger
+    RECON_TASK }o--|| CHANNEL : against
+    TRADE_ORDER ||--o{ NOTIFY_RECORD : has_notify
+    MERCHANT ||--o{ NOTIFY_RECORD : receives
 ```
 
 ### 5.2 核心表详细设计
