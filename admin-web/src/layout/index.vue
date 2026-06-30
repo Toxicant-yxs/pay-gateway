@@ -20,20 +20,20 @@
           <template v-for="route in menuRoutes" :key="route.path">
             <el-sub-menu v-if="route.children && route.children.filter(c => c.meta?.title).length > 1" :index="route.path">
               <template #title>
-                <el-icon><component :is="route.meta.icon" /></el-icon>
-                <span>{{ route.meta.title }}</span>
+                <el-icon><component :is="route.meta?.icon" /></el-icon>
+                <span>{{ route.meta?.title }}</span>
               </template>
               <el-menu-item
                 v-for="child in route.children.filter(c => c.meta?.title)"
                 :key="child.path"
                 :index="resolvePath(route.path, child.path)"
               >
-                {{ child.meta.title }}
+                {{ child.meta?.title }}
               </el-menu-item>
             </el-sub-menu>
             <el-menu-item v-else :index="getMenuIndex(route)">
-              <el-icon><component :is="route.meta.icon" /></el-icon>
-              <template #title>{{ route.meta.title }}</template>
+              <el-icon><component :is="route.meta?.icon" /></el-icon>
+              <template #title>{{ route.meta?.title }}</template>
             </el-menu-item>
           </template>
         </el-menu>
@@ -104,11 +104,11 @@ import {
   SwitchButton, ArrowDown, DataAnalysis, OfficeBuilding, Tickets,
   Connection, Warning, Document
 } from '@element-plus/icons-vue'
-import { useUserStore } from '../stores/user'
-import { useTagsViewStore } from '../stores/tagsView'
-import TagsView from '../components/TagsView/index.vue'
-import NotificationPanel from '../components/NotificationPanel/index.vue'
-import SearchDialog from '../components/SearchDialog/index.vue'
+import { useUserStore } from '@/stores/user'
+import { useTagsViewStore } from '@/stores/tagsView'
+import TagsView from '@/components/TagsView/index.vue'
+import NotificationPanel from '@/components/NotificationPanel/index.vue'
+import SearchDialog from '@/components/SearchDialog/index.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -148,7 +148,7 @@ const breadcrumbs = computed(() => {
   const result: { path: string; title: string; isLink: boolean }[] = []
   const titles = new Set<string>()
   for (const r of matched) {
-    const title = r.meta.title as string
+    const title = r.meta?.title as string
     if (titles.has(title)) continue
     titles.add(title)
     const hasChildren = r.children && r.children.some((c: any) => c.meta?.title)

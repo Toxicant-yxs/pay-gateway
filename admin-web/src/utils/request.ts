@@ -1,10 +1,11 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getToken, logout, isTokenValid } from './auth'
-import router from '../router'
+import { getToken, removeToken } from '@/utils/auth'
+import router from '@/router'
+import { useUserStore } from '@/stores/user'
 
 const service: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -17,26 +18,9 @@ service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = getToken()
     if (token) {
-      if (!isTokenValid(token)) {
-        if (!isReloginShowing) {
-          isReloginShowing = true
-          ElMessageBox.confirm('登录状态已过期，请重新登录', '系统提示', {
-            confirmButtonText: '重新登录',
-            cancelButtonText: '取消',
-            type: 'warning'
-          }).then(() => {
-            logout()
-            router.push('/login')
-          }).finally(() => {
-            isReloginShowing = false
-          })
-        }
-        return Promise.reject(new Error('Token expired'))
-      }
       config.headers.Authorization = `Bearer ${token}`
     }
-
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`
     config.headers['X-Request-Id'] = requestId
     return config
   },
@@ -45,43 +29,57 @@ service.interceptors.request.use(
   }
 )
 
+function handleUnauthorized() {
+  if (!isReloginShowing) {
+    isReloginShowing = true
+    try {
+      const userStore = useUserStore()
+      userStore.logout()
+    } catch {}
+    ElMessageBox.confirm('登录状态已过期，请重新登录', '系统提示', {
+      confirmButtonText: '重新登录',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      router.push('/login')
+    }).finally(() => {
+      isReloginShowing = false
+    })
+  }
+}
+
 service.interceptors.response.use(
   (response: AxiosResponse) => {
     const res = response.data
-    const { code, message, data } = res
 
-    if (code === undefined) {
+    if (res === undefined || res === null) {
       return response
     }
 
-    if (code === 200 || code === 0) {
-      return data
+    if (res.code === undefined && response.config.responseType === 'blob') {
+      return res
     }
 
-    if (code === 401) {
-      if (!isReloginShowing) {
-        isReloginShowing = true
-        ElMessageBox.confirm('登录状态已过期，请重新登录', '系统提示', {
-          confirmButtonText: '重新登录',
-          cancelButtonText: '取消',
-          type: 'warning'
-        }).then(() => {
-          logout()
-          router.push('/login')
-        }).finally(() => {
-          isReloginShowing = false
-        })
-      }
+    if (res.code === undefined) {
+      return res
+    }
+
+    if (res.code === 0 || res.code === 200) {
+      return res.data
+    }
+
+    if (res.code === 401) {
+      handleUnauthorized()
       return Promise.reject(new Error('Unauthorized'))
     }
 
-    if (code === 403) {
-      ElMessage.error('没有权限访问该资源')
-      return Promise.reject(new Error(message || 'Forbidden'))
+    if (res.code === 403) {
+      ElMessage.error(res.message || '没有权限访问该资源')
+      return Promise.reject(new Error(res.message || 'Forbidden'))
     }
 
-    ElMessage.error(message || '请求失败')
-    return Promise.reject(new Error(message || '请求失败'))
+    ElMessage.error(res.message || '请求失败')
+    return Promise.reject(new Error(res.message || '请求失败'))
   },
   (error) => {
     let message = '网络异常，请稍后重试'
@@ -93,19 +91,7 @@ service.interceptors.response.use(
           message = '请求参数错误'
           break
         case 401:
-          if (!isReloginShowing) {
-            isReloginShowing = true
-            ElMessageBox.confirm('登录状态已过期，请重新登录', '系统提示', {
-              confirmButtonText: '重新登录',
-              cancelButtonText: '取消',
-              type: 'warning'
-            }).then(() => {
-              logout()
-              router.push('/login')
-            }).finally(() => {
-              isReloginShowing = false
-            })
-          }
+          handleUnauthorized()
           return Promise.reject(error)
         case 403:
           message = '没有权限访问该资源'
@@ -140,12 +126,6 @@ service.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-
-export interface ApiResponse<T = any> {
-  code: number
-  message: string
-  data: T
-}
 
 export function request<T = any>(config: AxiosRequestConfig): Promise<T> {
   return service(config) as unknown as Promise<T>

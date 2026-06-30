@@ -47,7 +47,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Close, Refresh, Minus, CircleClose } from '@element-plus/icons-vue'
-import { useTagsViewStore } from '../../stores/tagsView'
+import { useTagsViewStore } from '@/stores/tagsView'
 
 const route = useRoute()
 const router = useRouter()

@@ -122,7 +122,7 @@
 import { ref, reactive, computed } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Message, Phone, OfficeBuilding, Clock } from '@element-plus/icons-vue'
-import { useUserStore } from '../../stores/user'
+import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const activeTab = ref('base')
