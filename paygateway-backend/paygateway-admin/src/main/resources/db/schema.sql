@@ -1,4 +1,3 @@
--- 系统用户表
 CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(32) NOT NULL UNIQUE,
@@ -16,7 +15,6 @@ CREATE TABLE IF NOT EXISTS sys_user (
     deleted TINYINT NOT NULL DEFAULT 0
 );
 
--- 商户信息表
 CREATE TABLE IF NOT EXISTS merchant_info (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     merchant_no VARCHAR(32) NOT NULL UNIQUE,
@@ -47,7 +45,6 @@ CREATE INDEX IF NOT EXISTS idx_merchant_name ON merchant_info(merchant_name);
 CREATE INDEX IF NOT EXISTS idx_merchant_status ON merchant_info(status);
 CREATE INDEX IF NOT EXISTS idx_merchant_created ON merchant_info(created_at);
 
--- 支付通道配置表
 CREATE TABLE IF NOT EXISTS channel_config (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     channel_code VARCHAR(32) NOT NULL UNIQUE,
@@ -57,7 +54,9 @@ CREATE TABLE IF NOT EXISTS channel_config (
     app_id VARCHAR(128),
     mch_id VARCHAR(64),
     api_key CLOB,
+    api_url VARCHAR(256),
     cert_path VARCHAR(256),
+    fee_rate DECIMAL(8,6) DEFAULT 0.006000,
     status TINYINT NOT NULL DEFAULT 1,
     priority INT DEFAULT 100,
     weight INT DEFAULT 100,
@@ -67,12 +66,31 @@ CREATE TABLE IF NOT EXISTS channel_config (
     daily_amount DECIMAL(18,2) DEFAULT 0.00,
     daily_count BIGINT DEFAULT 0,
     config CLOB,
+    remark VARCHAR(512),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0
 );
 
--- 交易订单表
+CREATE TABLE IF NOT EXISTS channel_route (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    route_no VARCHAR(32) NOT NULL UNIQUE,
+    route_name VARCHAR(128) NOT NULL,
+    channel_id BIGINT NOT NULL,
+    channel_code VARCHAR(32) NOT NULL,
+    pay_type VARCHAR(32),
+    min_amount DECIMAL(15,2) DEFAULT 0.01,
+    max_amount DECIMAL(15,2) DEFAULT 500000.00,
+    priority INT DEFAULT 100,
+    status TINYINT NOT NULL DEFAULT 1,
+    time_start VARCHAR(8),
+    time_end VARCHAR(8),
+    remark VARCHAR(512),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS trade_order (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_no VARCHAR(32) NOT NULL UNIQUE,
@@ -105,7 +123,6 @@ CREATE TABLE IF NOT EXISTS trade_order (
 CREATE INDEX IF NOT EXISTS idx_trade_merchant_order ON trade_order(merchant_id, merchant_order_no);
 CREATE INDEX IF NOT EXISTS idx_trade_status_created ON trade_order(status, created_at);
 
--- 退款订单表
 CREATE TABLE IF NOT EXISTS refund_order (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     refund_no VARCHAR(32) NOT NULL UNIQUE,
@@ -127,7 +144,6 @@ CREATE TABLE IF NOT EXISTS refund_order (
 CREATE INDEX IF NOT EXISTS idx_refund_order_no ON refund_order(order_no);
 CREATE INDEX IF NOT EXISTS idx_refund_status_created ON refund_order(status, created_at);
 
--- 风控规则表
 CREATE TABLE IF NOT EXISTS risk_rule (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     rule_code VARCHAR(64) NOT NULL UNIQUE,
@@ -144,7 +160,6 @@ CREATE TABLE IF NOT EXISTS risk_rule (
     deleted TINYINT NOT NULL DEFAULT 0
 );
 
--- 风险事件表
 CREATE TABLE IF NOT EXISTS risk_event (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     event_no VARCHAR(32) NOT NULL UNIQUE,
@@ -164,35 +179,83 @@ CREATE TABLE IF NOT EXISTS risk_event (
 );
 CREATE INDEX IF NOT EXISTS idx_risk_status ON risk_event(status);
 
--- 对账任务表
 CREATE TABLE IF NOT EXISTS recon_task (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     task_no VARCHAR(32) NOT NULL UNIQUE,
-    task_date DATE NOT NULL,
     channel_code VARCHAR(32) NOT NULL,
-    channel_count INT DEFAULT 0,
-    channel_amount DECIMAL(18,2) DEFAULT 0.00,
-    platform_count INT DEFAULT 0,
-    platform_amount DECIMAL(18,2) DEFAULT 0.00,
-    diff_count INT DEFAULT 0,
-    diff_amount DECIMAL(18,2) DEFAULT 0.00,
-    success_count INT DEFAULT 0,
+    recon_date DATE NOT NULL,
     status TINYINT NOT NULL DEFAULT 0,
-    error_msg VARCHAR(1024),
+    total_count INT DEFAULT 0,
+    total_amount DECIMAL(18,2) DEFAULT 0.00,
+    match_count INT DEFAULT 0,
+    diff_count INT DEFAULT 0,
+    channel_total_count INT DEFAULT 0,
+    channel_total_amount DECIMAL(18,2) DEFAULT 0.00,
+    bill_file VARCHAR(256),
     started_at TIMESTAMP,
-    completed_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    error_msg VARCHAR(1024),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0
 );
 
--- 系统配置表
-CREATE TABLE IF NOT EXISTS sys_config (
+CREATE TABLE IF NOT EXISTS recon_detail (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    task_id BIGINT NOT NULL,
+    order_no VARCHAR(32),
+    diff_type VARCHAR(32),
+    our_amount DECIMAL(15,2),
+    channel_amount DECIMAL(15,2),
+    our_status TINYINT,
+    channel_status TINYINT,
+    status TINYINT NOT NULL DEFAULT 0,
+    handle_note VARCHAR(512),
+    handled_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS system_config (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     config_key VARCHAR(64) NOT NULL UNIQUE,
     config_value CLOB NOT NULL,
-    config_name VARCHAR(128) NOT NULL,
-    config_desc VARCHAR(512),
+    config_group VARCHAR(32) NOT NULL DEFAULT 'basic',
+    description VARCHAR(256),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS system_notification (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    notify_no VARCHAR(32) NOT NULL UNIQUE,
+    title VARCHAR(256) NOT NULL,
+    content CLOB,
+    category VARCHAR(32) NOT NULL DEFAULT 'system',
+    level VARCHAR(10) NOT NULL DEFAULT 'info',
+    is_read TINYINT NOT NULL DEFAULT 0,
+    related_id VARCHAR(64),
+    related_type VARCHAR(32),
+    read_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS operation_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    log_no VARCHAR(32) NOT NULL UNIQUE,
+    user_id BIGINT,
+    username VARCHAR(32),
+    operation VARCHAR(256),
+    module VARCHAR(32),
+    method VARCHAR(16),
+    request_url VARCHAR(256),
+    request_params CLOB,
+    ip VARCHAR(45),
+    status TINYINT DEFAULT 1,
+    error_msg VARCHAR(1024),
+    cost_time BIGINT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
