@@ -27,10 +27,12 @@ public class DataInitializer implements CommandLineRunner {
     private final SysUserMapper sysUserMapper;
     private final MerchantInfoMapper merchantInfoMapper;
     private final ChannelConfigMapper channelConfigMapper;
+    private final ChannelRouteMapper channelRouteMapper;
     private final TradeOrderMapper tradeOrderMapper;
     private final RefundOrderMapper refundOrderMapper;
     private final RiskRuleMapper riskRuleMapper;
     private final RiskEventMapper riskEventMapper;
+    private final SystemConfigMapper systemConfigMapper;
 
     private static final DateTimeFormatter ORDER_NO_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private final Random random = new Random();
@@ -39,11 +41,13 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         initAdminUser();
         initChannels();
+        initChannelRoutes();
         initMerchants();
         initTradeOrders();
         initRefundOrders();
         initRiskRules();
         initRiskEvents();
+        initSystemConfigs();
         log.info("========================================");
         log.info("  PayGateway 后端服务初始化完成！");
         log.info("  默认账号: admin / admin123");
@@ -390,5 +394,90 @@ public class DataInitializer implements CommandLineRunner {
         e.setUpdatedAt(LocalDateTime.now());
         e.setDeleted(0);
         return e;
+    }
+
+    private void initChannelRoutes() {
+        Long routeCount = channelRouteMapper.selectCount(null);
+        if (routeCount > 0) {
+            log.info("Channel routes already exist, skip");
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<ChannelRoute> routes = Arrays.asList(
+                createChannelRoute("RT" + now.format(ORDER_NO_FMT) + "001", "微信-大额优先", 1L, "WECHAT", null,
+                        new BigDecimal("1000"), new BigDecimal("500000"), 100, 1, null, null, "单笔1000元以上优先走微信主通道"),
+                createChannelRoute("RT" + now.format(ORDER_NO_FMT) + "002", "支付宝-默认路由", 2L, "ALIPAY", null,
+                        new BigDecimal("0.01"), new BigDecimal("500000"), 100, 1, null, null, "支付宝默认通道路由"),
+                createChannelRoute("RT" + now.format(ORDER_NO_FMT) + "003", "银联-大额备用", 3L, "UNIONPAY", null,
+                        new BigDecimal("50000"), new BigDecimal("500000"), 80, 1, null, null, "5万以上大额备用走银联"),
+                createChannelRoute("RT" + now.format(ORDER_NO_FMT) + "004", "微信-JSAPI专用", 1L, "WECHAT", "JSAPI",
+                        new BigDecimal("0.01"), new BigDecimal("1000"), 100, 1, null, null, "微信公众号JSAPI支付专用路由"),
+                createChannelRoute("RT" + now.format(ORDER_NO_FMT) + "005", "支付宝-H5专用", 2L, "ALIPAY", "H5",
+                        new BigDecimal("0.01"), new BigDecimal("50000"), 100, 1, null, null, "支付宝H5移动端支付专用路由")
+        );
+        for (ChannelRoute r : routes) {
+            channelRouteMapper.insert(r);
+        }
+        log.info("Channel routes initialized: {} records", routes.size());
+    }
+
+    private ChannelRoute createChannelRoute(String routeNo, String routeName, Long channelId, String channelCode,
+                                             String payType, BigDecimal minAmount, BigDecimal maxAmount,
+                                             Integer priority, Integer status, String timeStart, String timeEnd, String remark) {
+        ChannelRoute r = new ChannelRoute();
+        r.setRouteNo(routeNo);
+        r.setRouteName(routeName);
+        r.setChannelId(channelId);
+        r.setChannelCode(channelCode);
+        r.setPayType(payType);
+        r.setMinAmount(minAmount);
+        r.setMaxAmount(maxAmount);
+        r.setPriority(priority);
+        r.setStatus(status);
+        r.setTimeStart(timeStart);
+        r.setTimeEnd(timeEnd);
+        r.setRemark(remark);
+        r.setCreatedAt(LocalDateTime.now());
+        r.setUpdatedAt(LocalDateTime.now());
+        r.setDeleted(0);
+        return r;
+    }
+
+    private void initSystemConfigs() {
+        Long cfgCount = systemConfigMapper.selectCount(null);
+        if (cfgCount > 0) {
+            log.info("System configs already exist, skip");
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        List<SystemConfig> configs = Arrays.asList(
+                createSystemConfig("site.name", "PayGateway支付网关", "BASIC", "系统名称"),
+                createSystemConfig("site.logo", "/logo.png", "BASIC", "系统Logo"),
+                createSystemConfig("order.expire.minutes", "30", "TRADE", "订单超时时间（分钟）"),
+                createSystemConfig("refund.auto.approve", "false", "TRADE", "退款自动审批"),
+                createSystemConfig("notify.url", "https://api.paygateway.com/notify", "NOTIFY", "回调通知地址"),
+                createSystemConfig("notify.retry.times", "5", "NOTIFY", "通知重试次数"),
+                createSystemConfig("risk.enabled", "true", "RISK", "风控开关"),
+                createSystemConfig("risk.score.high", "80", "RISK", "高风险分数阈值"),
+                createSystemConfig("settle.auto", "true", "SETTLE", "自动结算开关"),
+                createSystemConfig("settle.time", "02:00", "SETTLE", "每日结算时间")
+        );
+        for (SystemConfig c : configs) {
+            c.setCreatedAt(now);
+            c.setUpdatedAt(now);
+            systemConfigMapper.insert(c);
+        }
+        log.info("System configs initialized: {} records", configs.size());
+    }
+
+    private SystemConfig createSystemConfig(String key, String value, String group, String desc) {
+        SystemConfig c = new SystemConfig();
+        c.setConfigKey(key);
+        c.setConfigValue(value);
+        c.setConfigGroup(group);
+        c.setDescription(desc);
+        return c;
     }
 }

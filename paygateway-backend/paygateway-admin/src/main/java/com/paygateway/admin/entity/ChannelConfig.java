@@ -40,6 +40,15 @@ public class ChannelConfig {
     @TableField("cert_path")
     private String certPath;
 
+    @TableField("api_url")
+    private String apiUrl;
+
+    @TableField("fee_rate")
+    private BigDecimal feeRate;
+
+    @TableField("remark")
+    private String remark;
+
     @TableField("status")
     private Integer status;
 
