@@ -6,7 +6,7 @@
         <p class="page-desc">管理和配置所有支付通道，实时监控通道运行状态</p>
       </div>
       <div class="header-actions">
-        <el-button>
+        <el-button @click="loadData">
           <el-icon><RefreshRight /></el-icon>
           刷新状态
         </el-button>
@@ -98,9 +98,8 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filterForm.status" placeholder="全部状态" clearable style="width: 140px">
-            <el-option label="正常运行" value="normal" />
-            <el-option label="异常" value="error" />
-            <el-option label="维护中" value="maintenance" />
+            <el-option label="正常运行" :value="1" />
+            <el-option label="已停用" :value="0" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -116,7 +115,7 @@
       </el-form>
     </div>
 
-    <div class="channel-grid">
+    <div class="channel-grid" v-loading="loading">
       <div v-for="channel in filteredChannels" :key="channel.channelCode" class="card-shadow channel-card" :class="{ disabled: channel.status === 0 }">
         <div class="channel-card-header">
           <div class="channel-logo" :style="{ background: channel.color }">
@@ -263,6 +262,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   RefreshRight, Plus, Connection, Setting, Money, CreditCard,
   CircleCheck, CircleClose, Warning, SwitchButton, Edit, Search,
@@ -271,6 +271,8 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { channelApi } from '@/api/channel'
 import type { ChannelInfo } from '@/types/channel'
+
+const loading = ref(false)
 
 const filterForm = reactive({
   name: '',
@@ -287,6 +289,8 @@ const metrics = ref({
 })
 
 interface ChannelCardItem {
+  id?: string
+  channelId?: string
   channelCode: string
   name: string
   shortName: string
@@ -299,9 +303,15 @@ interface ChannelCardItem {
   successRate: number
   latency: number
   qps: number
+  dailyAmount?: number
+  mchId?: string
+  appId?: string
+  feeRate?: number
+  remark?: string
 }
 
 const channels = ref<ChannelCardItem[]>([])
+const allChannels = ref<ChannelCardItem[]>([])
 
 const channelColors: Record<string, string> = {
   wechat: '#07C160',
@@ -380,7 +390,7 @@ function getChannelTypeInfo(channelType: number | string | undefined): { type: s
 }
 
 const filteredChannels = computed(() => {
-  return channels.value.filter(ch => {
+  return allChannels.value.filter(ch => {
     if (filterForm.name && !ch.name.includes(filterForm.name)) return false
     if (filterForm.type && ch.type !== filterForm.type) return false
     if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
@@ -415,52 +425,57 @@ const configRules: FormRules = {
 }
 
 async function loadData() {
+  loading.value = true
   try {
-    const data = await channelApi.getList()
-    if (Array.isArray(data)) {
-      channels.value = data.map((ch: ChannelInfo) => {
-        const typeInfo = getChannelTypeInfo(ch.channelType)
-        const chName = getChannelName(String(ch.channelCode ?? ''), ch.channelName)
-        const successRate = ch.avgSuccessRate ?? ch.successRate ?? 0
-        return {
-          channelCode: String(ch.channelCode ?? ''),
-          name: chName,
-          shortName: getChannelShortName(String(ch.channelCode ?? ''), chName),
-          type: typeInfo.type,
-          typeLabel: typeInfo.label,
-          color: getChannelColor(String(ch.channelCode ?? '')),
-          status: ch.status === 1 ? 1 : 0,
-          enabled: ch.status === 1,
-          payMethodsList: parsePayTypes(ch.payTypes),
-          successRate: Number(Number(successRate).toFixed(2)),
-          latency: Math.round(ch.avgLatency ?? ch.latency ?? 0),
-          qps: ch.dailyCount ?? ch.qps ?? ch.currentQps ?? 0
-        }
-      })
-      metrics.value.totalChannels = channels.value.length
-      metrics.value.runningChannels = channels.value.filter(c => c.status === 1).length
-      metrics.value.errorChannels = channels.value.filter(c => c.status === 0).length
-      metrics.value.todayTransactions = channels.value.reduce((sum, c) => sum + c.qps, 0).toLocaleString('zh-CN')
-      const allPayMethods = new Set<string>()
-      channels.value.forEach(c => c.payMethodsList.forEach(m => allPayMethods.add(m)))
-      metrics.value.payMethods = allPayMethods.size
+    const params: any = {}
+    if (filterForm.name) params.channelName = filterForm.name
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      params.status = Number(filterForm.status)
     }
+    const data = await channelApi.getList(params)
+    const channelList = Array.isArray(data) ? data : (data as any)?.list ?? []
+    allChannels.value = channelList.map((ch: ChannelInfo) => {
+      const typeInfo = getChannelTypeInfo(ch.channelType)
+      const chName = getChannelName(String(ch.channelCode ?? ''), ch.channelName)
+      const successRate = ch.avgSuccessRate ?? ch.successRate ?? 0
+      return {
+        id: ch.id ?? ch.channelId,
+        channelCode: String(ch.channelCode ?? ''),
+        name: chName,
+        shortName: getChannelShortName(String(ch.channelCode ?? ''), chName),
+        type: typeInfo.type,
+        typeLabel: typeInfo.label,
+        color: getChannelColor(String(ch.channelCode ?? '')),
+        status: ch.status === 1 ? 1 : 0,
+        enabled: ch.status === 1,
+        payMethodsList: parsePayTypes(ch.payTypes),
+        successRate: Number(Number(successRate).toFixed(2)),
+        latency: Math.round(ch.avgLatency ?? ch.latency ?? 0),
+        qps: ch.dailyCount ?? ch.qps ?? ch.currentQps ?? 0,
+        dailyAmount: ch.dailyAmount,
+        mchId: ch.mchId,
+        appId: ch.appId,
+        feeRate: ch.feeRate
+      }
+    })
+    metrics.value.totalChannels = allChannels.value.length
+    metrics.value.runningChannels = allChannels.value.filter(c => c.status === 1).length
+    metrics.value.errorChannels = allChannels.value.filter(c => c.status === 0).length
+    metrics.value.todayTransactions = allChannels.value.reduce((sum, c) => sum + c.qps, 0).toLocaleString('zh-CN')
+    const allPayMethods = new Set<string>()
+    allChannels.value.forEach(c => c.payMethodsList.forEach(m => allPayMethods.add(m)))
+    metrics.value.payMethods = allPayMethods.size
   } catch (e) {
     console.error('Failed to load channels:', e)
-    channels.value = [
-      {
-        channelCode: 'WECHAT', name: '微信支付', shortName: '微', type: 'thirdparty', typeLabel: '第三方支付',
-        color: '#07C160', status: 1, enabled: true,
-        payMethodsList: ['JSAPI', 'Native', 'H5'],
-        successRate: 99.89, latency: 32, qps: 0
-      },
-      {
-        channelCode: 'ALIPAY', name: '支付宝', shortName: '支', type: 'thirdparty', typeLabel: '第三方支付',
-        color: '#1677FF', status: 1, enabled: true,
-        payMethodsList: ['电脑网站', '手机网站'],
-        successRate: 99.92, latency: 28, qps: 0
-      }
-    ]
+    allChannels.value = []
+    metrics.value.totalChannels = 0
+    metrics.value.runningChannels = 0
+    metrics.value.errorChannels = 0
+    metrics.value.todayTransactions = '0'
+    metrics.value.payMethods = 0
+    ElMessage.error('加载通道列表失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -472,6 +487,7 @@ const handleReset = () => {
   filterForm.name = ''
   filterForm.type = ''
   filterForm.status = ''
+  loadData()
 }
 
 const getTypeTagType = (type: string) => {

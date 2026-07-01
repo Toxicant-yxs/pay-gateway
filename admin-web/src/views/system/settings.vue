@@ -3,277 +3,154 @@
     <div class="page-header">
       <div>
         <h2 class="page-title">系统配置</h2>
-        <p class="page-desc">管理支付系统全局参数、支付规则、通知渠道与安全策略</p>
+        <p class="page-desc">管理支付系统全局参数、支付规则与操作日志</p>
       </div>
     </div>
 
-    <div class="card-shadow settings-card">
-      <el-tabs v-model="activeTab" class="settings-tabs">
-        <el-tab-pane name="basic">
+    <div class="card-shadow settings-card" v-loading="configLoading">
+      <el-tabs v-model="activeTab" class="settings-tabs" @tab-change="handleTabChange">
+        <el-tab-pane v-for="group in configGroups" :key="group.key" :name="group.key">
           <template #label>
             <span class="tab-label">
-              <el-icon><Setting /></el-icon>
-              基本设置
+              <el-icon><component :is="group.icon" /></el-icon>
+              {{ group.label }}
             </span>
           </template>
-          <el-form :model="basicForm" label-width="120px" class="settings-form">
-            <el-form-item label="系统名称">
-              <el-input v-model="basicForm.systemName" placeholder="请输入系统名称" style="max-width: 400px" />
-            </el-form-item>
-            <el-form-item label="系统Logo">
-              <div class="logo-upload">
-                <el-upload
-                  class="logo-uploader"
-                  action="#"
-                  :show-file-list="false"
-                  :auto-upload="false"
-                >
-                  <img v-if="basicForm.logoUrl" :src="basicForm.logoUrl" class="logo-preview" />
-                  <el-icon v-else class="logo-uploader-icon"><Plus /></el-icon>
-                </el-upload>
-                <div class="logo-tip">
-                  <p>建议尺寸 200×60px，支持 PNG/JPG 格式，文件大小不超过 2MB</p>
-                </div>
-              </div>
-            </el-form-item>
-            <el-form-item label="首页URL">
-              <el-input v-model="basicForm.homeUrl" placeholder="https://" style="max-width: 500px" />
-            </el-form-item>
-            <el-form-item label="ICP备案号">
-              <el-input v-model="basicForm.icpNumber" placeholder="请输入ICP备案号" style="max-width: 300px" />
-            </el-form-item>
-            <el-form-item label="客服电话">
-              <el-input v-model="basicForm.servicePhone" placeholder="请输入客服电话" style="max-width: 250px" />
-            </el-form-item>
-            <el-form-item label="客服邮箱">
-              <el-input v-model="basicForm.serviceEmail" placeholder="请输入客服邮箱" style="max-width: 300px" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleSave('basic')">
+          <el-form label-width="140px" class="settings-form">
+            <template v-for="item in groupItems[group.key]" :key="item.id">
+              <el-form-item :label="item.description || item.configKey">
+                <template v-if="isBooleanConfig(item.configKey, item.configValue)">
+                  <el-switch
+                    v-model="configValues[item.id]"
+                    active-text="开启"
+                    inactive-text="关闭"
+                    :active-value="'true'"
+                    :inactive-value="'false'"
+                  />
+                </template>
+                <template v-else-if="isNumberConfig(item.configKey, item.configValue)">
+                  <el-input-number
+                    v-model="numberValues[item.id]"
+                    controls-position="right"
+                    style="width: 240px"
+                  />
+                </template>
+                <template v-else-if="isTextareaConfig(item.configKey)">
+                  <el-input
+                    v-model="configValues[item.id]"
+                    type="textarea"
+                    :rows="4"
+                    :placeholder="item.description || item.configKey"
+                    style="max-width: 500px"
+                  />
+                </template>
+                <template v-else>
+                  <el-input
+                    v-model="configValues[item.id]"
+                    :placeholder="item.description || item.configKey"
+                    style="max-width: 500px"
+                    clearable
+                  />
+                </template>
+              </el-form-item>
+            </template>
+            <el-form-item v-if="groupItems[group.key] && groupItems[group.key].length > 0">
+              <el-button type="primary" @click="handleSaveConfig" :loading="saveLoading">
                 <el-icon><Check /></el-icon>
                 保存设置
               </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane name="payment">
-          <template #label>
-            <span class="tab-label">
-              <el-icon><CreditCard /></el-icon>
-              支付设置
-            </span>
-          </template>
-          <el-form :model="paymentForm" label-width="140px" class="settings-form">
-            <el-form-item label="测试模式">
-              <el-switch v-model="paymentForm.testMode" active-text="开启" inactive-text="关闭" />
-              <span class="form-tip">开启后所有交易走沙箱环境，不会产生真实资金流动</span>
-            </el-form-item>
-            <el-form-item label="自动结算">
-              <el-switch v-model="paymentForm.autoSettle" active-text="开启" inactive-text="关闭" />
-              <span class="form-tip">自动将已完成交易结算至商户账户</span>
-            </el-form-item>
-            <el-form-item label="退款审核">
-              <el-switch v-model="paymentForm.refundAudit" active-text="需要" inactive-text="无需" />
-              <span class="form-tip">退款申请是否需要人工审核后执行</span>
-            </el-form-item>
-            <el-form-item label="回调重试次数">
-              <el-input-number v-model="paymentForm.retryCount" :min="0" :max="10" controls-position="right" />
-              <span class="form-tip">支付/退款回调失败时最大重试次数</span>
-            </el-form-item>
-            <el-form-item label="订单超时时间">
-              <el-input-number v-model="paymentForm.orderTimeout" :min="1" :max="1440" controls-position="right" />
-              <span class="form-tip">分钟，未支付订单自动关闭时间</span>
-            </el-form-item>
-            <el-form-item label="结算周期">
-              <el-select v-model="paymentForm.settleCycle" placeholder="请选择" style="width: 180px">
-                <el-option label="T+0 实时到账" value="T+0" />
-                <el-option label="T+1 次日到账" value="T+1" />
-                <el-option label="D+0 自然日" value="D+0" />
-                <el-option label="D+1 自然日次日" value="D+1" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="单笔限额">
-              <el-row :gutter="12">
-                <el-col :span="6">
-                  <el-input-number v-model="paymentForm.minAmount" :min="0" :precision="2" controls-position="right" style="width: 100%" placeholder="最低金额" />
-                </el-col>
-                <el-col :span="2" style="display: flex; align-items: center; justify-content: center; color: var(--text-secondary)">-</el-col>
-                <el-col :span="6">
-                  <el-input-number v-model="paymentForm.maxAmount" :min="0" :precision="2" controls-position="right" style="width: 100%" placeholder="最高金额" />
-                </el-col>
-                <el-col :span="4" style="display: flex; align-items: center; color: var(--text-secondary)">元</el-col>
-              </el-row>
-            </el-form-item>
-            <el-form-item label="分账功能">
-              <el-switch v-model="paymentForm.splitEnabled" active-text="开启" inactive-text="关闭" />
-              <span class="form-tip">支持一笔交易分账至多个接收方</span>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleSave('payment')">
-                <el-icon><Check /></el-icon>
-                保存设置
+              <el-button @click="loadConfig">
+                <el-icon><Refresh /></el-icon>
+                重置
               </el-button>
             </el-form-item>
+            <el-empty v-if="!groupItems[group.key] || groupItems[group.key].length === 0" description="暂无配置项" />
           </el-form>
         </el-tab-pane>
 
-        <el-tab-pane name="notification">
+        <el-tab-pane name="logs">
           <template #label>
             <span class="tab-label">
-              <el-icon><Bell /></el-icon>
-              通知设置
+              <el-icon><Document /></el-icon>
+              操作日志
             </span>
           </template>
-          <div class="notification-section">
-            <h4 class="section-title">
-              <el-icon><Message /></el-icon>
-              通知渠道
-            </h4>
-            <el-form :model="notificationForm" label-width="120px" class="settings-form">
-              <el-form-item label="邮件通知">
-                <el-switch v-model="notificationForm.emailEnabled" active-text="开启" inactive-text="关闭" />
+          <div class="log-filter">
+            <el-form :model="logFilter" inline>
+              <el-form-item label="操作人">
+                <el-input v-model="logFilter.username" placeholder="请输入用户名" clearable style="width: 160px" />
               </el-form-item>
-              <el-form-item v-if="notificationForm.emailEnabled" label="SMTP服务器">
-                <el-input v-model="notificationForm.smtpHost" placeholder="smtp.example.com" style="max-width: 350px" />
+              <el-form-item label="操作时间">
+                <el-date-picker
+                  v-model="logFilter.dateRange"
+                  type="datetimerange"
+                  range-separator="至"
+                  start-placeholder="开始时间"
+                  end-placeholder="结束时间"
+                  style="width: 340px"
+                  value-format="YYYY-MM-DD HH:mm:ss"
+                />
               </el-form-item>
-              <el-form-item v-if="notificationForm.emailEnabled" label="发件邮箱">
-                <el-input v-model="notificationForm.smtpUser" placeholder="n******@***********" style="max-width: 300px" />
-              </el-form-item>
-              <el-form-item label="短信通知">
-                <el-switch v-model="notificationForm.smsEnabled" active-text="开启" inactive-text="关闭" />
-              </el-form-item>
-              <el-form-item v-if="notificationForm.smsEnabled" label="短信服务商">
-                <el-select v-model="notificationForm.smsProvider" style="width: 200px">
-                  <el-option label="阿里云短信" value="aliyun" />
-                  <el-option label="腾讯云短信" value="tencent" />
-                  <el-option label="华为云短信" value="huawei" />
-                </el-select>
-              </el-form-item>
-              <el-form-item label="站内信">
-                <el-switch v-model="notificationForm.internalEnabled" active-text="开启" inactive-text="关闭" />
-                <span class="form-tip">在管理后台消息中心推送</span>
-              </el-form-item>
-              <el-form-item label="企业微信Webhook">
-                <el-switch v-model="notificationForm.wecomEnabled" active-text="开启" inactive-text="关闭" />
-              </el-form-item>
-              <el-form-item v-if="notificationForm.wecomEnabled" label="Webhook地址">
-                <el-input v-model="notificationForm.wecomWebhook" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=" style="max-width: 500px" />
-              </el-form-item>
-              <el-form-item label="钉钉Webhook">
-                <el-switch v-model="notificationForm.dingtalkEnabled" active-text="开启" inactive-text="关闭" />
-              </el-form-item>
-              <el-form-item v-if="notificationForm.dingtalkEnabled" label="Webhook地址">
-                <el-input v-model="notificationForm.dingtalkWebhook" placeholder="https://oapi.dingtalk.com/robot/send?access_token=" style="max-width: 500px" />
+              <el-form-item>
+                <el-button type="primary" @click="handleLogSearch">
+                  <el-icon><Search /></el-icon>
+                  查询
+                </el-button>
+                <el-button @click="handleLogReset">
+                  <el-icon><Refresh /></el-icon>
+                  重置
+                </el-button>
               </el-form-item>
             </el-form>
           </div>
-
-          <div class="notification-section">
-            <h4 class="section-title">
-              <el-icon><User /></el-icon>
-              事件通知接收人
-            </h4>
-            <el-table :data="notifyEvents" border class="notify-table" style="max-width: 800px">
-              <el-table-column prop="eventName" label="事件类型" width="160" />
-              <el-table-column label="通知渠道">
-                <template #default="{ row }">
-                  <el-checkbox-group v-model="row.channels">
-                    <el-checkbox label="email" :disabled="!notificationForm.emailEnabled">邮件</el-checkbox>
-                    <el-checkbox label="sms" :disabled="!notificationForm.smsEnabled">短信</el-checkbox>
-                    <el-checkbox label="internal" :disabled="!notificationForm.internalEnabled">站内信</el-checkbox>
-                    <el-checkbox label="wecom" :disabled="!notificationForm.wecomEnabled">企业微信</el-checkbox>
-                    <el-checkbox label="dingtalk" :disabled="!notificationForm.dingtalkEnabled">钉钉</el-checkbox>
-                  </el-checkbox-group>
-                </template>
-              </el-table-column>
-              <el-table-column label="接收人" width="280">
-                <template #default="{ row }">
-                  <el-input v-model="row.receivers" placeholder="多人用逗号分隔" />
-                </template>
-              </el-table-column>
-            </el-table>
+          <el-table
+            :data="logData"
+            style="width: 100%"
+            stripe
+            v-loading="logLoading"
+          >
+            <el-table-column prop="username" label="操作人" width="120" />
+            <el-table-column prop="operation" label="操作内容" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="method" label="请求方法" width="180">
+              <template #default="{ row }">
+                <span class="mono-text method-text">{{ row.method || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="ip" label="IP地址" width="140">
+              <template #default="{ row }">
+                <span class="mono-text">{{ row.ip || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="duration" label="耗时" width="100" align="right">
+              <template #default="{ row }">
+                <span class="duration-text">{{ row.duration ?? 0 }}ms</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 1 ? 'success' : 'danger'" size="small">
+                  {{ row.status === 1 ? '成功' : '失败' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="createdAt" label="操作时间" width="170">
+              <template #default="{ row }">
+                {{ formatDateTime(row.createdAt) }}
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="pagination-wrapper">
+            <el-pagination
+              v-model:current-page="logPage"
+              v-model:page-size="logPageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="logTotal"
+              layout="total, sizes, prev, pager, next, jumper"
+              background
+              @current-change="loadLogs"
+              @size-change="loadLogs"
+            />
           </div>
-
-          <el-form label-width="120px" class="settings-form">
-            <el-form-item>
-              <el-button type="primary" @click="handleSave('notification')">
-                <el-icon><Check /></el-icon>
-                保存设置
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
-
-        <el-tab-pane name="security">
-          <template #label>
-            <span class="tab-label">
-              <el-icon><Lock /></el-icon>
-              安全设置
-            </span>
-          </template>
-          <el-form :model="securityForm" label-width="140px" class="settings-form">
-            <el-form-item label="密码最小长度">
-              <el-input-number v-model="securityForm.minPasswordLength" :min="6" :max="32" controls-position="right" />
-              <span class="form-tip">位</span>
-            </el-form-item>
-            <el-form-item label="密码复杂度要求">
-              <el-checkbox-group v-model="securityForm.passwordComplexity">
-                <el-checkbox label="uppercase">必须包含大写字母</el-checkbox>
-                <el-checkbox label="lowercase">必须包含小写字母</el-checkbox>
-                <el-checkbox label="number">必须包含数字</el-checkbox>
-                <el-checkbox label="symbol">必须包含特殊字符</el-checkbox>
-              </el-checkbox-group>
-            </el-form-item>
-            <el-form-item label="密码有效期">
-              <el-input-number v-model="securityForm.passwordExpire" :min="0" :max="365" controls-position="right" />
-              <span class="form-tip">天，0表示永不过期</span>
-            </el-form-item>
-            <el-form-item label="登录失败锁定">
-              <el-switch v-model="securityForm.loginLockEnabled" active-text="开启" inactive-text="关闭" />
-            </el-form-item>
-            <template v-if="securityForm.loginLockEnabled">
-              <el-form-item label="失败次数阈值">
-                <el-input-number v-model="securityForm.loginFailCount" :min="1" :max="20" controls-position="right" />
-                <span class="form-tip">次</span>
-              </el-form-item>
-              <el-form-item label="锁定时长">
-                <el-input-number v-model="securityForm.lockDuration" :min="1" :max="1440" controls-position="right" />
-                <span class="form-tip">分钟</span>
-              </el-form-item>
-            </template>
-            <el-form-item label="IP白名单">
-              <el-switch v-model="securityForm.ipWhitelistEnabled" active-text="开启" inactive-text="关闭" />
-              <span class="form-tip">仅允许白名单内IP访问后台</span>
-            </el-form-item>
-            <el-form-item v-if="securityForm.ipWhitelistEnabled" label="白名单列表">
-              <el-input
-                v-model="securityForm.ipWhitelist"
-                type="textarea"
-                :rows="4"
-                placeholder="每行一个IP或IP段，例如：&#10;192.168.1.1&#10;10.0.0.0/8"
-                style="max-width: 500px"
-              />
-            </el-form-item>
-            <el-form-item label="会话超时时间">
-              <el-input-number v-model="securityForm.sessionTimeout" :min="5" :max="480" controls-position="right" />
-              <span class="form-tip">分钟，无操作自动退出登录</span>
-            </el-form-item>
-            <el-form-item label="双因素认证">
-              <el-switch v-model="securityForm.twoFactorEnabled" active-text="强制开启" inactive-text="可选" />
-              <span class="form-tip">强制要求所有管理员开启2FA验证</span>
-            </el-form-item>
-            <el-form-item label="API签名验证">
-              <el-switch v-model="securityForm.apiSignVerify" active-text="开启" inactive-text="关闭" />
-              <span class="form-tip">所有API请求必须携带有效签名</span>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleSave('security')">
-                <el-icon><Check /></el-icon>
-                保存设置
-              </el-button>
-            </el-form-item>
-          </el-form>
         </el-tab-pane>
       </el-tabs>
     </div>
@@ -281,77 +158,188 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { Setting, CreditCard, Bell, Lock, Message, User, Check, Plus } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Setting, CreditCard, Bell, Lock, Document, Check, Refresh, Search, DataBoard } from '@element-plus/icons-vue'
+import { systemApi } from '@/api/system'
+import type { SystemConfigItem, OperationLog } from '@/types/system'
 
-const activeTab = ref('basic')
+const activeTab = ref('BASIC')
+const configLoading = ref(false)
+const saveLoading = ref(false)
+const logLoading = ref(false)
 
-const basicForm = reactive({
-  systemName: '支付管理系统',
-  logoUrl: '',
-  homeUrl: 'https://example.com',
-  icpNumber: '京ICP备12345678号',
-  servicePhone: '400-888-8888',
-  serviceEmail: 's******@***********'
+const configGroups = [
+  { key: 'BASIC', label: '基本设置', icon: Setting },
+  { key: 'TRADE', label: '交易设置', icon: CreditCard },
+  { key: 'NOTIFY', label: '通知设置', icon: Bell },
+  { key: 'RISK', label: '风控设置', icon: Lock },
+  { key: 'SETTLE', label: '结算设置', icon: DataBoard }
+]
+
+const groupItems = reactive<Record<string, SystemConfigItem[]>>({})
+const configValues = reactive<Record<string, string>>({})
+const numberValues = reactive<Record<string, number>>({})
+const originalValues = reactive<Record<string, string>>({})
+
+const logPage = ref(1)
+const logPageSize = ref(10)
+const logTotal = ref(0)
+const logData = ref<OperationLog[]>([])
+
+const logFilter = reactive({
+  username: '',
+  dateRange: [] as string[]
 })
 
-const paymentForm = reactive({
-  testMode: false,
-  autoSettle: true,
-  refundAudit: true,
-  retryCount: 3,
-  orderTimeout: 30,
-  settleCycle: 'T+1',
-  minAmount: 0.01,
-  maxAmount: 50000,
-  splitEnabled: false
-})
-
-const notificationForm = reactive({
-  emailEnabled: true,
-  smtpHost: 'smtp.example.com',
-  smtpUser: 'n******@***********',
-  smsEnabled: false,
-  smsProvider: 'aliyun',
-  internalEnabled: true,
-  wecomEnabled: false,
-  wecomWebhook: '',
-  dingtalkEnabled: false,
-  dingtalkWebhook: ''
-})
-
-interface NotifyEvent {
-  key: string
-  eventName: string
-  channels: string[]
-  receivers: string
+function padZero(n: number): string {
+  return n < 10 ? '0' + n : '' + n
 }
 
-const notifyEvents = ref<NotifyEvent[]>([
-  { key: 'trade_success', eventName: '交易成功', channels: ['internal', 'email'], receivers: 'f***@***********' },
-  { key: 'refund', eventName: '退款通知', channels: ['internal', 'email'], receivers: 'f***@***********' },
-  { key: 'risk', eventName: '风控预警', channels: ['sms', 'wecom', 'internal'], receivers: '138******00,139******00' },
-  { key: 'reconcile_error', eventName: '对账差错', channels: ['email', 'internal'], receivers: 'a****@***********' }
-])
-
-const securityForm = reactive({
-  minPasswordLength: 8,
-  passwordComplexity: ['lowercase', 'number'],
-  passwordExpire: 90,
-  loginLockEnabled: true,
-  loginFailCount: 5,
-  lockDuration: 30,
-  ipWhitelistEnabled: false,
-  ipWhitelist: '',
-  sessionTimeout: 30,
-  twoFactorEnabled: false,
-  apiSignVerify: true
-})
-
-const handleSave = (_tab: string) => {
-  ElMessage.success('设置保存成功')
+function formatDateTime(dateStr?: string): string {
+  if (!dateStr) return '-'
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    return date.getFullYear() + '-' +
+      padZero(date.getMonth() + 1) + '-' +
+      padZero(date.getDate()) + ' ' +
+      padZero(date.getHours()) + ':' +
+      padZero(date.getMinutes()) + ':' +
+      padZero(date.getSeconds())
+  } catch {
+    return dateStr
+  }
 }
+
+function isBooleanConfig(key: string, value: string): boolean {
+  const boolKeys = ['enabled', 'switch', 'toggle', 'auto', 'test_mode', 'audit', 'verify']
+  const lowerKey = key.toLowerCase()
+  if (boolKeys.some(k => lowerKey.includes(k))) return true
+  return value === 'true' || value === 'false'
+}
+
+function isNumberConfig(key: string, value: string): boolean {
+  const numKeys = ['count', 'time', 'timeout', 'length', 'size', 'amount', 'rate', 'times', 'duration', 'cycle', 'expire', 'min', 'max', 'retry']
+  const lowerKey = key.toLowerCase()
+  if (numKeys.some(k => lowerKey.includes(k))) return true
+  return !isNaN(Number(value)) && value !== ''
+}
+
+function isTextareaConfig(key: string): boolean {
+  const textKeys = ['whitelist', 'list', 'urls', 'ips', 'receivers', 'remark', 'desc']
+  const lowerKey = key.toLowerCase()
+  return textKeys.some(k => lowerKey.includes(k))
+}
+
+async function loadConfig() {
+  configLoading.value = true
+  try {
+    const res = await systemApi.getConfig()
+    if (res) {
+      Object.keys(groupItems).forEach(k => {
+        groupItems[k] = []
+      })
+      Object.keys(configValues).forEach(k => delete configValues[k])
+      Object.keys(numberValues).forEach(k => delete numberValues[k])
+      Object.keys(originalValues).forEach(k => delete originalValues[k])
+
+      const list: SystemConfigItem[] = res.list || []
+      list.forEach(item => {
+        const g = item.configGroup
+        if (!groupItems[g]) groupItems[g] = []
+        groupItems[g].push(item)
+        configValues[item.id] = item.configValue
+        originalValues[item.id] = item.configValue
+        const num = Number(item.configValue)
+        if (!isNaN(num)) {
+          numberValues[item.id] = num
+        }
+      })
+    }
+  } catch (e) {
+    console.error('Failed to load config:', e)
+    ElMessage.error('加载配置失败')
+  } finally {
+    configLoading.value = false
+  }
+}
+
+async function handleSaveConfig() {
+  saveLoading.value = true
+  try {
+    const allItems: SystemConfigItem[] = []
+    Object.keys(groupItems).forEach(gKey => {
+      const items = groupItems[gKey] || []
+      items.forEach(item => {
+        let val = configValues[item.id]
+        if (numberValues[item.id] !== undefined && isNumberConfig(item.configKey, item.configValue)) {
+          val = String(numberValues[item.id])
+        }
+        allItems.push({
+          ...item,
+          configValue: val
+        })
+      })
+    })
+    await systemApi.updateConfig(allItems)
+    ElMessage.success('配置保存成功')
+    await loadConfig()
+  } catch (e) {
+    console.error('Failed to save config:', e)
+    ElMessage.error('保存配置失败')
+  } finally {
+    saveLoading.value = false
+  }
+}
+
+async function loadLogs() {
+  logLoading.value = true
+  try {
+    const params: any = {
+      page: logPage.value,
+      pageSize: logPageSize.value
+    }
+    if (logFilter.username) params.username = logFilter.username
+    if (logFilter.dateRange && logFilter.dateRange.length === 2) {
+      params.startTime = logFilter.dateRange[0]
+      params.endTime = logFilter.dateRange[1]
+    }
+    const res = await systemApi.getOperationLogs(params)
+    if (res) {
+      logData.value = res.list ?? []
+      logTotal.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load logs:', e)
+    logData.value = []
+    logTotal.value = 0
+  } finally {
+    logLoading.value = false
+  }
+}
+
+const handleTabChange = (tab: string) => {
+  if (tab === 'logs' && logData.value.length === 0) {
+    loadLogs()
+  }
+}
+
+const handleLogSearch = () => {
+  logPage.value = 1
+  loadLogs()
+}
+
+const handleLogReset = () => {
+  logFilter.username = ''
+  logFilter.dateRange = []
+  logPage.value = 1
+  loadLogs()
+}
+
+onMounted(() => {
+  loadConfig()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -427,90 +415,38 @@ const handleSave = (_tab: string) => {
   }
 }
 
-.form-tip {
-  margin-left: 12px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
+.log-filter {
+  padding: 16px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
 
-.logo-upload {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.logo-uploader {
-  :deep(.el-upload) {
-    width: 120px;
-    height: 60px;
-    border: 1px dashed var(--border-color);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    transition: border-color var(--transition-fast);
-
-    &:hover {
-      border-color: var(--primary-color);
-    }
-  }
-}
-
-.logo-preview {
-  width: 120px;
-  height: 60px;
-  object-fit: contain;
-}
-
-.logo-uploader-icon {
-  font-size: 24px;
-  color: var(--text-placeholder);
-}
-
-.logo-tip {
-  font-size: 12px;
-  color: var(--text-secondary);
-
-  p {
-    margin: 0;
-    line-height: 1.5;
-  }
-}
-
-.notification-section {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--border-light);
-
-  &:last-of-type {
-    border-bottom: none;
+  .el-form-item {
     margin-bottom: 0;
-    padding-bottom: 0;
   }
 }
 
-.section-title {
+.mono-text {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.method-text {
+  color: var(--primary-color);
+  background: var(--primary-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.duration-text {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  color: var(--success-color);
+  font-weight: 500;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 20px 0;
-  padding-left: 0;
-}
-
-.notify-table {
-  :deep(.el-checkbox-group) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 16px;
-  }
-
-  :deep(.el-checkbox) {
-    margin-right: 0;
-  }
+  justify-content: flex-end;
 }
 </style>

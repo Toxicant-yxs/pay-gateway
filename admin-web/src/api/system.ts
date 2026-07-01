@@ -1,16 +1,16 @@
 import request from '@/utils/request'
-import type { SystemConfig, SystemNotification, OperationLog, SearchResult } from '@/types/system'
+import type { SystemConfigItem, SystemConfigResponse, SystemNotification, OperationLog, SearchResult } from '@/types/system'
 import type { PageResult } from '@/types/api'
 
 export const systemApi = {
   getConfig() {
-    return request<SystemConfig>({
+    return request<SystemConfigResponse>({
       url: '/system/config',
       method: 'get'
     })
   },
 
-  updateConfig(data: SystemConfig) {
+  updateConfig(data: SystemConfigItem[]) {
     return request({
       url: '/system/config',
       method: 'put',

@@ -1,44 +1,36 @@
 import type { ChannelCode } from './transaction'
 
-export type ReconStatus = 'PENDING' | 'DOWNLOADING' | 'PARSING' | 'COMPARING' | 'COMPLETED' | 'ERROR'
-
 export interface ReconTask {
-  taskId: string
+  id: string
   taskNo: string
-  taskDate: string
-  channelCode: ChannelCode
-  channelName: string
-  channelFileUrl?: string
-  channelCount: number
-  channelAmount: number
-  platformCount: number
-  platformAmount: number
-  diffCount: number
-  diffAmount: number
+  channelCode: string
+  reconDate: string
+  status: number
+  totalCount: number
   successCount: number
-  status: ReconStatus
-  errorMsg?: string
-  startedAt?: string
-  completedAt?: string
+  diffCount: number
+  totalAmount: number
+  successAmount: number
+  diffAmount: number
+  startTime?: string
+  endTime?: string
   createdAt: string
+  remark?: string
 }
 
 export interface ReconDetail {
-  detailId: string
+  id: string
   taskId: string
   orderNo: string
   channelOrderNo: string
-  diffType: DiffType
-  platformAmount?: number
+  orderAmount?: number
   channelAmount?: number
-  platformStatus?: string
-  channelStatus?: string
-  handleStatus: 'PENDING' | 'HANDLED' | 'IGNORED'
+  diffType: 'SHORT' | 'EXTRA' | 'MISMATCH'
+  diffAmount: number
+  status: number
   handleNote?: string
   createdAt: string
 }
-
-export type DiffType = 'AMOUNT_MISMATCH' | 'CHANNEL_ONLY' | 'PLATFORM_ONLY' | 'STATUS_MISMATCH'
 
 export interface ReconStats {
   todayCount: number
@@ -48,20 +40,21 @@ export interface ReconStats {
 }
 
 export interface ReconQuery {
-  channelCode?: ChannelCode | ''
-  status?: ReconStatus | ''
+  channelCode?: string
+  status?: number | string
   startDate?: string
   endDate?: string
+  reconDate?: string
+  taskNo?: string
   page?: number
   pageSize?: number
 }
 
 export interface ReconReport {
-  reportId: string
+  id: string
   reportName: string
-  reportType: 'DAILY' | 'MONTHLY' | 'CUSTOM'
-  channelCode: ChannelCode
-  channelName: string
+  reportType: string
+  channelCode: string
   startDate: string
   endDate: string
   totalCount: number

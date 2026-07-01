@@ -31,8 +31,8 @@
 
     <div class="card-shadow filter-card">
       <el-form :model="filterForm" inline class="filter-form">
-        <el-form-item label="批次号">
-          <el-input v-model="filterForm.batchNo" placeholder="请输入对账批次号" clearable style="width: 200px" />
+        <el-form-item label="任务号">
+          <el-input v-model="filterForm.taskNo" placeholder="请输入对账任务号" clearable style="width: 200px" />
         </el-form-item>
         <el-form-item label="对账日期">
           <el-date-picker
@@ -42,22 +42,22 @@
             start-placeholder="开始日期"
             end-placeholder="结束日期"
             style="width: 260px"
+            value-format="YYYY-MM-DD"
           />
         </el-form-item>
         <el-form-item label="支付通道">
-          <el-select v-model="filterForm.channel" placeholder="全部通道" clearable style="width: 140px">
-            <el-option label="微信支付" value="wechat" />
-            <el-option label="支付宝" value="alipay" />
-            <el-option label="银联支付" value="unionpay" />
-            <el-option label="Visa/MC" value="card" />
+          <el-select v-model="filterForm.channelCode" placeholder="全部通道" clearable style="width: 140px">
+            <el-option label="微信支付" value="WECHAT" />
+            <el-option label="支付宝" value="ALIPAY" />
+            <el-option label="银联支付" value="UNIONPAY" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filterForm.status" placeholder="全部状态" clearable style="width: 140px">
-            <el-option label="对账中" value="processing" />
-            <el-option label="对账成功" value="success" />
-            <el-option label="对账失败" value="failed" />
-            <el-option label="有差错" value="error" />
+            <el-option label="待执行" :value="0" />
+            <el-option label="执行中" :value="1" />
+            <el-option label="成功" :value="2" />
+            <el-option label="失败" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -93,45 +93,49 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="50" align="center" />
-        <el-table-column prop="batchNo" label="批次号" min-width="180" fixed="left">
+        <el-table-column prop="taskNo" label="任务号" min-width="180" fixed="left">
           <template #default="{ row }">
-            <span class="link-text mono-text" @click="viewDetail(row)">{{ row.batchNo }}</span>
+            <span class="link-text mono-text" @click="viewDetail(row)">{{ row.taskNo }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="reconDate" label="对账日期" width="110" />
-        <el-table-column prop="channel" label="支付通道" width="110">
+        <el-table-column prop="channelCode" label="支付通道" width="110">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" :color="getChannelColor(row.channel)" style="color: #fff; border: none">
-              {{ row.channel }}
+            <el-tag size="small" effect="plain" :color="getChannelColor(row.channelCode)" style="color: #fff; border: none">
+              {{ getChannelName(row.channelCode) }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="平台交易" min-width="160" align="right">
           <template #default="{ row }">
-            <div>{{ row.platformCount }}笔</div>
-            <div class="amount-text">¥{{ formatNumber(row.platformAmount) }}</div>
+            <div>{{ row.totalCount }}笔</div>
+            <div class="amount-text">¥{{ formatAmount(row.totalAmount) }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="通道交易" min-width="160" align="right">
+        <el-table-column label="成功交易" min-width="160" align="right">
           <template #default="{ row }">
-            <div>{{ row.channelCount }}笔</div>
-            <div class="amount-text">¥{{ formatNumber(row.channelAmount) }}</div>
+            <div>{{ row.successCount }}笔</div>
+            <div class="amount-text">¥{{ formatAmount(row.successAmount) }}</div>
           </template>
         </el-table-column>
-        <el-table-column prop="errorCount" label="差错笔数" width="100" align="center">
+        <el-table-column prop="diffCount" label="差错笔数" width="100" align="center">
           <template #default="{ row }">
-            <span :class="{ 'error-count': row.errorCount > 0 }">{{ row.errorCount }}</span>
+            <span :class="{ 'error-count': row.diffCount > 0 }">{{ row.diffCount }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="对账状态" width="110" align="center">
+        <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="completeTime" label="完成时间" width="160" />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column prop="endTime" label="完成时间" width="160">
+          <template #default="{ row }">
+            {{ formatDateTime(row.endTime) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">
               <el-icon><View /></el-icon>详情
@@ -139,8 +143,8 @@
             <el-button type="primary" link size="small" @click="downloadBill(row)">
               <el-icon><Download /></el-icon>对账单
             </el-button>
-            <el-button type="warning" link size="small" v-if="row.errorCount > 0" @click="handleProcessError(row)">
-              <el-icon><Warning /></el-icon>差错处理
+            <el-button type="warning" link size="small" v-if="row.status === 3" @click="retryTask(row)">
+              <el-icon><RefreshRight /></el-icon>重试
             </el-button>
           </template>
         </el-table-column>
@@ -153,6 +157,8 @@
           :total="total"
           layout="total, sizes, prev, pager, next, jumper"
           background
+          @current-change="loadData"
+          @size-change="loadData"
         />
       </div>
     </div>
@@ -164,43 +170,46 @@
       size="800px"
       :destroy-on-close="true"
     >
-      <div v-if="currentBatch" class="recon-detail">
+      <div v-if="currentTask" class="recon-detail" v-loading="detailLoading">
         <div class="detail-header-card">
           <div class="batch-info">
             <div class="batch-no">
-              <span class="label">批次号</span>
-              <span class="mono-text value">{{ currentBatch.batchNo }}</span>
+              <span class="label">任务号</span>
+              <span class="mono-text value">{{ currentTask.taskNo }}</span>
             </div>
-            <el-tag :type="getStatusType(currentBatch.status)" size="small">
-              {{ getStatusText(currentBatch.status) }}
+            <el-tag :type="getStatusType(currentTask.status)" size="small">
+              {{ getStatusText(currentTask.status) }}
             </el-tag>
           </div>
           <el-descriptions :column="3" border class="info-descriptions">
-            <el-descriptions-item label="对账日期">{{ currentBatch.reconDate }}</el-descriptions-item>
-            <el-descriptions-item label="支付通道">{{ currentBatch.channel }}</el-descriptions-item>
-            <el-descriptions-item label="完成时间">{{ currentBatch.completeTime }}</el-descriptions-item>
-            <el-descriptions-item label="平台笔数">{{ currentBatch.platformCount }}笔</el-descriptions-item>
-            <el-descriptions-item label="通道笔数">{{ currentBatch.channelCount }}笔</el-descriptions-item>
-            <el-descriptions-item label="差错笔数">{{ currentBatch.errorCount }}笔</el-descriptions-item>
-            <el-descriptions-item label="平台金额">
-              <span class="amount-text">¥{{ formatNumber(currentBatch.platformAmount) }}</span>
+            <el-descriptions-item label="对账日期">{{ currentTask.reconDate }}</el-descriptions-item>
+            <el-descriptions-item label="支付通道">{{ getChannelName(currentTask.channelCode) }}</el-descriptions-item>
+            <el-descriptions-item label="完成时间">{{ formatDateTime(currentTask.endTime) }}</el-descriptions-item>
+            <el-descriptions-item label="总笔数">{{ currentTask.totalCount }}笔</el-descriptions-item>
+            <el-descriptions-item label="成功笔数">{{ currentTask.successCount }}笔</el-descriptions-item>
+            <el-descriptions-item label="差错笔数">{{ currentTask.diffCount }}笔</el-descriptions-item>
+            <el-descriptions-item label="总金额">
+              <span class="amount-text">¥{{ formatAmount(currentTask.totalAmount) }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="通道金额">
-              <span class="amount-text">¥{{ formatNumber(currentBatch.channelAmount) }}</span>
+            <el-descriptions-item label="成功金额">
+              <span class="amount-text">¥{{ formatAmount(currentTask.successAmount) }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="差异金额">
-              <span class="amount-text diff-amount">¥{{ formatNumber(Math.abs(currentBatch.platformAmount - currentBatch.channelAmount)) }}</span>
+              <span class="amount-text diff-amount">¥{{ formatAmount(Math.abs(currentTask.diffAmount)) }}</span>
             </el-descriptions-item>
+            <el-descriptions-item label="开始时间" :span="1">{{ formatDateTime(currentTask.startTime) }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间" :span="2">{{ formatDateTime(currentTask.createdAt) }}</el-descriptions-item>
+            <el-descriptions-item v-if="currentTask.remark" label="备注" :span="3">{{ currentTask.remark }}</el-descriptions-item>
           </el-descriptions>
         </div>
 
-        <div class="error-section">
+        <div class="error-section" v-if="currentTask.diffCount > 0">
           <div class="section-title">
             <el-icon><Warning /></el-icon>
             差错明细
-            <el-tag size="small" type="warning" v-if="currentBatch.errorCount > 0">{{ currentBatch.errorCount }}条</el-tag>
+            <el-tag size="small" type="warning">{{ currentTask.diffCount }}条</el-tag>
           </div>
-          <el-table :data="currentErrors" style="width: 100%" stripe size="small">
+          <el-table :data="diffData" style="width: 100%" stripe size="small" v-loading="diffLoading">
             <el-table-column prop="diffType" label="差异类型" width="110" align="center">
               <template #default="{ row }">
                 <el-tag :type="getDiffType(row.diffType)" size="small">
@@ -213,25 +222,30 @@
                 <span class="mono-text">{{ row.orderNo }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="platformAmount" label="平台金额" width="120" align="right">
+            <el-table-column prop="channelOrderNo" label="渠道订单号" min-width="180">
               <template #default="{ row }">
-                <span class="amount-text">¥{{ formatNumber(row.platformAmount) }}</span>
+                <span class="mono-text">{{ row.channelOrderNo || '-' }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="orderAmount" label="平台金额" width="120" align="right">
+              <template #default="{ row }">
+                <span class="amount-text">¥{{ formatAmount(row.orderAmount) }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="channelAmount" label="通道金额" width="120" align="right">
               <template #default="{ row }">
-                <span class="amount-text">¥{{ formatNumber(row.channelAmount) }}</span>
+                <span class="amount-text">¥{{ formatAmount(row.channelAmount) }}</span>
               </template>
             </el-table-column>
             <el-table-column prop="diffAmount" label="差异金额" width="120" align="right">
               <template #default="{ row }">
-                <span class="amount-text diff-amount">¥{{ formatNumber(Math.abs(row.diffAmount)) }}</span>
+                <span class="amount-text diff-amount">¥{{ formatAmount(Math.abs(row.diffAmount)) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="processStatus" label="处理状态" width="100" align="center">
+            <el-table-column prop="status" label="处理状态" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="getProcessStatusType(row.processStatus)" size="small">
-                  {{ getProcessStatusText(row.processStatus) }}
+                <el-tag :type="getProcessStatusType(row.status)" size="small">
+                  {{ getProcessStatusText(row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -241,7 +255,7 @@
                   type="primary"
                   link
                   size="small"
-                  :disabled="row.processStatus !== 'pending'"
+                  :disabled="row.status === 1"
                   @click="openErrorDialog(row)"
                 >
                   处理
@@ -249,42 +263,48 @@
               </template>
             </el-table-column>
           </el-table>
+          <div class="pagination-wrapper" v-if="diffTotal > pageSize">
+            <el-pagination
+              v-model:current-page="diffPage"
+              v-model:page-size="diffPageSize"
+              :page-sizes="[10, 20, 50]"
+              :total="diffTotal"
+              layout="total, prev, pager, next"
+              background
+              small
+              @current-change="loadDiffs"
+              @size-change="loadDiffs"
+            />
+          </div>
         </div>
       </div>
     </el-drawer>
 
     <el-dialog v-model="errorDialogVisible" title="差错处理" width="560px" destroy-on-close>
-      <div v-if="currentError" class="error-dialog-content">
+      <div v-if="currentDiff" class="error-dialog-content">
         <el-descriptions :column="2" border class="error-info">
           <el-descriptions-item label="差异类型">
-            <el-tag :type="getDiffType(currentError.diffType)" size="small">
-              {{ getDiffTypeText(currentError.diffType) }}
+            <el-tag :type="getDiffType(currentDiff.diffType)" size="small">
+              {{ getDiffTypeText(currentDiff.diffType) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="订单号">
-            <span class="mono-text">{{ currentError.orderNo }}</span>
+            <span class="mono-text">{{ currentDiff.orderNo }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="平台金额">
-            <span class="amount-text">¥{{ formatNumber(currentError.platformAmount) }}</span>
+            <span class="amount-text">¥{{ formatAmount(currentDiff.orderAmount) }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="通道金额">
-            <span class="amount-text">¥{{ formatNumber(currentError.channelAmount) }}</span>
+            <span class="amount-text">¥{{ formatAmount(currentDiff.channelAmount) }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="差异金额" :span="2">
-            <span class="amount-text diff-amount">¥{{ formatNumber(Math.abs(currentError.diffAmount)) }}</span>
+            <span class="amount-text diff-amount">¥{{ formatAmount(Math.abs(currentDiff.diffAmount)) }}</span>
           </el-descriptions-item>
         </el-descriptions>
         <el-form :model="errorForm" label-width="100px" style="margin-top: 20px">
-          <el-form-item label="处理方式" required>
-            <el-radio-group v-model="errorForm.handleType">
-              <el-radio value="confirm">确认差异</el-radio>
-              <el-radio value="supplement" v-if="currentError.diffType === 'short'">补单</el-radio>
-              <el-radio value="refund" v-if="currentError.diffType === 'long' || currentError.diffType === 'amount'">退款</el-radio>
-            </el-radio-group>
-          </el-form-item>
           <el-form-item label="处理备注">
             <el-input
-              v-model="errorForm.remark"
+              v-model="errorForm.note"
               type="textarea"
               :rows="3"
               placeholder="请输入处理备注说明"
@@ -294,193 +314,289 @@
       </div>
       <template #footer>
         <el-button @click="errorDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitErrorHandle">确认处理</el-button>
+        <el-button type="primary" @click="submitErrorHandle" :loading="handleLoading">确认处理</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Document, DataAnalysis, Warning, Download, Search, Refresh, View, CircleClose, Money } from '@element-plus/icons-vue'
+import { Document, DataAnalysis, Warning, Download, Search, Refresh, View, CircleClose, Money, RefreshRight } from '@element-plus/icons-vue'
+import { reconApi } from '@/api/reconciliation'
+import type { ReconTask, ReconDetail, ReconStats } from '@/types/reconciliation'
 
 const loading = ref(false)
+const detailLoading = ref(false)
+const diffLoading = ref(false)
+const handleLoading = ref(false)
 const drawerVisible = ref(false)
 const errorDialogVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(8)
-const selectedRows = ref<any[]>([])
-const currentBatch = ref<any>(null)
-const currentErrors = ref<any[]>([])
-const currentError = ref<any>(null)
+const total = ref(0)
+const selectedRows = ref<ReconTask[]>([])
+const currentTask = ref<ReconTask | null>(null)
+const diffData = ref<ReconDetail[]>([])
+const diffPage = ref(1)
+const diffPageSize = ref(10)
+const diffTotal = ref(0)
+const currentDiff = ref<ReconDetail | null>(null)
 
 const filterForm = reactive({
-  batchNo: '',
-  dateRange: [],
-  channel: '',
-  status: ''
+  taskNo: '',
+  dateRange: [] as string[],
+  channelCode: '',
+  status: '' as number | string
 })
 
 const errorForm = reactive({
-  handleType: 'confirm',
-  remark: ''
+  note: ''
 })
 
-const statsData = [
-  { label: '今日对账笔数', value: '12,856', type: '', icon: Document, bgColor: 'var(--primary-bg)', iconColor: 'var(--primary-color)' },
-  { label: '今日对账金额', value: '¥2,845,632', type: 'success', icon: Money, bgColor: 'var(--success-bg)', iconColor: 'var(--success-color)' },
-  { label: '差错笔数', value: '23', type: 'warning', icon: Warning, bgColor: 'var(--warning-bg)', iconColor: 'var(--warning-color)' },
-  { label: '待处理差错', value: '8', type: 'danger', icon: CircleClose, bgColor: 'var(--danger-bg)', iconColor: 'var(--danger-color)' }
-]
-
-const generateErrors = (batchId: number, count: number) => {
-  const types = ['long', 'short', 'amount']
-  const statuses = ['pending', 'confirmed', 'supplement', 'refunded']
-  const errors = []
-  for (let i = 0; i < count; i++) {
-    const type = types[i % 3]
-    const platformBase = 10000 + Math.floor(Math.random() * 50000)
-    let channelAmt = platformBase
-    let diffAmt = 0
-    if (type === 'long') {
-      diffAmt = Math.floor(Math.random() * 5000) + 1000
-      channelAmt = platformBase + diffAmt
-    } else if (type === 'short') {
-      diffAmt = -(Math.floor(Math.random() * 5000) + 1000)
-      channelAmt = platformBase + diffAmt
-    } else {
-      diffAmt = Math.floor(Math.random() * 2000) - 1000
-      channelAmt = platformBase + diffAmt
-    }
-    errors.push({
-      id: `${batchId}-${i}`,
-      diffType: type,
-      orderNo: `PAY202606${28 - batchId}${String(1000 + i).padStart(4, '0')}`,
-      platformAmount: platformBase,
-      channelAmount: channelAmt,
-      diffAmount: diffAmt,
-      processStatus: i === 0 ? 'pending' : statuses[(i + 1) % 4]
-    })
-  }
-  return errors
+const channelNameMap: Record<string, string> = {
+  WECHAT: '微信支付',
+  ALIPAY: '支付宝',
+  UNIONPAY: '银联支付'
 }
 
-const tableData = ref([
-  { id: 1, batchNo: 'RC202606280001', reconDate: '2026-06-28', channel: '微信支付', platformCount: 3256, platformAmount: 85623400, channelCount: 3256, channelAmount: 85623400, errorCount: 0, status: 'success', completeTime: '2026-06-28 23:55:32' },
-  { id: 2, batchNo: 'RC202606280002', reconDate: '2026-06-28', channel: '支付宝', platformCount: 4521, platformAmount: 124568900, channelCount: 4518, channelAmount: 124235600, errorCount: 3, status: 'error', completeTime: '2026-06-28 23:58:15' },
-  { id: 3, batchNo: 'RC202606280003', reconDate: '2026-06-28', channel: '银联支付', platformCount: 1856, platformAmount: 56892300, channelCount: 1856, channelAmount: 56892300, errorCount: 0, status: 'success', completeTime: '2026-06-28 23:45:08' },
-  { id: 4, batchNo: 'RC202606270001', reconDate: '2026-06-27', channel: '微信支付', platformCount: 3892, platformAmount: 98452100, channelCount: 3890, channelAmount: 98125600, errorCount: 2, status: 'error', completeTime: '2026-06-27 23:52:44' },
-  { id: 5, batchNo: 'RC202606270002', reconDate: '2026-06-27', channel: '支付宝', platformCount: 5123, platformAmount: 145236700, channelCount: 0, channelAmount: 0, errorCount: 5, status: 'failed', completeTime: '2026-06-27 23:59:59' },
-  { id: 6, batchNo: 'RC202606270003', reconDate: '2026-06-27', channel: 'Visa/MC', platformCount: 425, platformAmount: 23568900, channelCount: 425, channelAmount: 23568900, errorCount: 0, status: 'success', completeTime: '2026-06-27 23:40:22' },
-  { id: 7, batchNo: 'RC202606260001', reconDate: '2026-06-26', channel: '微信支付', platformCount: 2985, platformAmount: 78956200, channelCount: 2984, channelAmount: 78825600, errorCount: 1, status: 'processing', completeTime: '-' },
-  { id: 8, batchNo: 'RC202606260002', reconDate: '2026-06-26', channel: '支付宝', platformCount: 4215, platformAmount: 112568300, channelCount: 4215, channelAmount: 112568300, errorCount: 0, status: 'success', completeTime: '2026-06-26 23:50:18' }
+const channelColors: Record<string, string> = {
+  WECHAT: '#07C160',
+  ALIPAY: '#1677FF',
+  UNIONPAY: '#E60012'
+}
+
+const statsData = ref([
+  { label: '今日对账笔数', value: '--', type: '', icon: Document, bgColor: 'var(--primary-bg)', iconColor: 'var(--primary-color)' },
+  { label: '今日对账金额', value: '--', type: 'success', icon: Money, bgColor: 'var(--success-bg)', iconColor: 'var(--success-color)' },
+  { label: '差错笔数', value: '--', type: 'warning', icon: Warning, bgColor: 'var(--warning-bg)', iconColor: 'var(--warning-color)' },
+  { label: '待处理差错', value: '--', type: 'danger', icon: CircleClose, bgColor: 'var(--danger-bg)', iconColor: 'var(--danger-color)' }
 ])
 
-tableData.value.forEach((item: any) => {
-  if (item.errorCount > 0) {
-    item.errors = generateErrors(item.id, item.errorCount)
-  } else {
-    item.errors = []
+const tableData = ref<ReconTask[]>([])
+
+function padZero(n: number): string {
+  return n < 10 ? '0' + n : '' + n
+}
+
+function formatDateTime(dateStr?: string): string {
+  if (!dateStr) return '-'
+  try {
+    const date = new Date(dateStr)
+    if (isNaN(date.getTime())) return dateStr
+    return date.getFullYear() + '-' +
+      padZero(date.getMonth() + 1) + '-' +
+      padZero(date.getDate()) + ' ' +
+      padZero(date.getHours()) + ':' +
+      padZero(date.getMinutes()) + ':' +
+      padZero(date.getSeconds())
+  } catch {
+    return dateStr
   }
-})
-
-const formatNumber = (num: number) => (num / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
-
-const getChannelColor = (channel: string) => {
-  const map: Record<string, string> = { '微信支付': '#07C160', '支付宝': '#1677FF', '银联支付': '#E60012', 'Visa/MC': '#1A1F71' }
-  return map[channel] || 'var(--primary-color)'
 }
 
-const getStatusType = (status: string) => {
-  const map: Record<string, string> = { success: 'success', processing: 'warning', failed: 'danger', error: 'warning' }
-  return map[status] || 'info'
+function formatAmount(amount: number | undefined | null): string {
+  if (amount === null || amount === undefined || isNaN(amount as number)) return '0.00'
+  return (amount / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = { success: '对账成功', processing: '对账中', failed: '对账失败', error: '有差错' }
-  return map[status] || '未知'
+function getChannelName(code: string): string {
+  if (!code) return '-'
+  return channelNameMap[code] ?? code
 }
 
-const getDiffType = (type: string) => {
-  const map: Record<string, string> = { long: 'danger', short: 'warning', amount: '' }
-  return map[type] || 'info'
+function getChannelColor(channel: string): string {
+  if (!channel) return 'var(--primary-color)'
+  return channelColors[channel] ?? 'var(--primary-color)'
 }
 
-const getDiffTypeText = (type: string) => {
-  const map: Record<string, string> = { long: '长款', short: '短款', amount: '金额不一致' }
-  return map[type] || '未知'
+const reconStatusMap: Record<number, { text: string; type: string }> = {
+  0: { text: '待执行', type: 'info' },
+  1: { text: '执行中', type: 'warning' },
+  2: { text: '成功', type: 'success' },
+  3: { text: '失败', type: 'danger' }
 }
 
-const getProcessStatusType = (status: string) => {
-  const map: Record<string, string> = { pending: 'warning', confirmed: 'success', supplement: '', refunded: 'info' }
-  return map[status] || 'info'
+function getStatusType(status: number) {
+  return reconStatusMap[status]?.type ?? 'info'
 }
 
-const getProcessStatusText = (status: string) => {
-  const map: Record<string, string> = { pending: '待处理', confirmed: '已确认', supplement: '已补单', refunded: '已退款' }
-  return map[status] || '未知'
+function getStatusText(status: number) {
+  return reconStatusMap[status]?.text ?? '未知'
+}
+
+const diffTypeMap: Record<string, { text: string; type: string }> = {
+  SHORT: { text: '短款', type: 'warning' },
+  EXTRA: { text: '长款', type: 'danger' },
+  MISMATCH: { text: '金额不一致', type: 'danger' }
+}
+
+function getDiffType(type: string) {
+  return diffTypeMap[type]?.type ?? 'info'
+}
+
+function getDiffTypeText(type: string) {
+  return diffTypeMap[type]?.text ?? type
+}
+
+function getProcessStatusType(status: number) {
+  if (status === 1) return 'success'
+  return 'warning'
+}
+
+function getProcessStatusText(status: number) {
+  if (status === 1) return '已处理'
+  return '待处理'
+}
+
+async function loadStats() {
+  try {
+    const res = await reconApi.getStats()
+    if (res) {
+      statsData.value[0].value = (res.todayCount ?? 0).toLocaleString()
+      statsData.value[1].value = '¥' + formatAmount(res.diffAmount ?? 0)
+      statsData.value[2].value = (res.diffCount ?? 0).toLocaleString()
+      statsData.value[3].value = (res.pendingDiffCount ?? 0).toLocaleString()
+    }
+  } catch (e) {
+    console.error('Failed to load stats:', e)
+  }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      pageSize: pageSize.value
+    }
+    if (filterForm.taskNo) params.taskNo = filterForm.taskNo
+    if (filterForm.channelCode) params.channelCode = filterForm.channelCode
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      params.status = filterForm.status
+    }
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.startDate = filterForm.dateRange[0]
+      params.endDate = filterForm.dateRange[1]
+    }
+    const res = await reconApi.getTasks(params)
+    if (res) {
+      tableData.value = res.list ?? []
+      total.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load recon tasks:', e)
+    tableData.value = []
+    total.value = 0
+    ElMessage.error('加载对账任务失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadDiffs() {
+  if (!currentTask.value) return
+  diffLoading.value = true
+  try {
+    const res = await reconApi.getTaskDiffs(currentTask.value.id, {
+      page: diffPage.value,
+      pageSize: diffPageSize.value
+    })
+    if (res) {
+      diffData.value = res.list ?? []
+      diffTotal.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load diffs:', e)
+    diffData.value = []
+    diffTotal.value = 0
+  } finally {
+    diffLoading.value = false
+  }
 }
 
 const handleSearch = () => {
-  loading.value = true
-  setTimeout(() => loading.value = false, 500)
+  currentPage.value = 1
+  loadData()
 }
 
 const handleReset = () => {
-  filterForm.batchNo = ''
+  filterForm.taskNo = ''
   filterForm.dateRange = []
-  filterForm.channel = ''
+  filterForm.channelCode = ''
   filterForm.status = ''
+  currentPage.value = 1
+  loadData()
 }
 
 const handleRefresh = () => {
-  loading.value = true
-  setTimeout(() => {
-    loading.value = false
-    ElMessage.success('数据已刷新')
-  }, 500)
+  loadData()
+  loadStats()
+  ElMessage.success('数据已刷新')
 }
 
-const handleSelectionChange = (rows: any[]) => {
+const handleSelectionChange = (rows: ReconTask[]) => {
   selectedRows.value = rows
 }
 
-const viewDetail = (row: any) => {
-  currentBatch.value = row
-  currentErrors.value = row.errors || []
+const viewDetail = async (row: ReconTask) => {
+  currentTask.value = row
+  diffPage.value = 1
   drawerVisible.value = true
+  if (row.diffCount > 0) {
+    await loadDiffs()
+  } else {
+    diffData.value = []
+    diffTotal.value = 0
+  }
 }
 
-const downloadBill = (row: any) => {
-  ElMessage.success(`正在下载对账单：${row.batchNo}`)
+const downloadBill = (row: ReconTask) => {
+  ElMessage.success(`正在下载对账单：${row.taskNo}`)
 }
 
-const handleProcessError = (row: any) => {
-  currentBatch.value = row
-  currentErrors.value = row.errors || []
-  drawerVisible.value = true
+const retryTask = async (row: ReconTask) => {
+  try {
+    await reconApi.retryTask(row.id)
+    ElMessage.success('任务已重新提交')
+    loadData()
+  } catch (e) {
+    console.error('Failed to retry task:', e)
+    ElMessage.error('重试失败')
+  }
 }
 
-const openErrorDialog = (error: any) => {
-  currentError.value = error
-  errorForm.handleType = 'confirm'
-  errorForm.remark = ''
+const openErrorDialog = (diff: ReconDetail) => {
+  currentDiff.value = diff
+  errorForm.note = ''
   errorDialogVisible.value = true
 }
 
-const submitErrorHandle = () => {
-  if (!errorForm.remark) {
-    ElMessage.warning('请输入处理备注')
-    return
-  }
-  ElMessage.success('差错处理成功')
-  errorDialogVisible.value = false
-  if (currentError.value) {
-    currentError.value.processStatus = errorForm.handleType === 'confirm' ? 'confirmed' : errorForm.handleType === 'supplement' ? 'supplement' : 'refunded'
+const submitErrorHandle = async () => {
+  if (!currentDiff.value) return
+  handleLoading.value = true
+  try {
+    await reconApi.handleDiff(currentDiff.value.id, {
+      action: 'CONFIRM',
+      note: errorForm.note
+    })
+    ElMessage.success('差错处理成功')
+    errorDialogVisible.value = false
+    await loadDiffs()
+    await loadStats()
+  } catch (e) {
+    console.error('Failed to handle diff:', e)
+    ElMessage.error('处理失败')
+  } finally {
+    handleLoading.value = false
   }
 }
+
+onMounted(() => {
+  loadData()
+  loadStats()
+})
 </script>
 
 <style lang="scss" scoped>

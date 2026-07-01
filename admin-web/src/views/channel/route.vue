@@ -6,6 +6,10 @@
         <p class="page-desc">智能分配支付通道，优化成功率与成本</p>
       </div>
       <div class="header-actions">
+        <el-button @click="loadData">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新增路由规则
@@ -34,11 +38,35 @@
       </div>
     </div>
 
+    <div class="card-shadow filter-card">
+      <el-form :model="filterForm" class="filter-form" inline>
+        <el-form-item label="规则名称">
+          <el-input v-model="filterForm.routeName" placeholder="请输入规则名称" clearable style="width: 200px" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="filterForm.status" placeholder="全部状态" clearable style="width: 140px">
+            <el-option label="已启用" :value="1" />
+            <el-option label="已禁用" :value="0" />
+          </el-select>
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleSearch">
+            <el-icon><Search /></el-icon>
+            查询
+          </el-button>
+          <el-button @click="handleReset">
+            <el-icon><Refresh /></el-icon>
+            重置
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </div>
+
     <div class="card-shadow table-card">
       <div class="table-header">
         <div class="table-info">
           <el-icon><Sort /></el-icon>
-          共 <span class="highlight">{{ tableData.length }}</span> 条规则，按优先级从高到低匹配
+          共 <span class="highlight">{{ total }}</span> 条规则，按优先级从高到低匹配
         </div>
       </div>
       <el-table
@@ -53,30 +81,30 @@
             <span class="priority-badge" :class="{ 'priority-top': row.priority === 1 }">{{ row.priority }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="规则名称" min-width="160">
+        <el-table-column prop="routeName" label="规则名称" min-width="180">
           <template #default="{ row }">
             <div class="rule-name">
               <el-icon><Promotion /></el-icon>
-              <span>{{ row.name }}</span>
+              <span>{{ row.routeName ?? row.ruleName ?? '-' }}</span>
             </div>
+            <div class="rule-no mono-text" v-if="row.routeNo ?? row.ruleId">{{ row.routeNo ?? row.ruleId }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="适用商户" width="140">
+        <el-table-column label="目标通道" width="140">
           <template #default="{ row }">
-            <el-tag v-if="row.isAllMerchants" type="info" size="small">全部商户</el-tag>
-            <el-tooltip v-else :content="row.merchantName" placement="top">
-              <el-tag type="primary" size="small">指定商户</el-tag>
-            </el-tooltip>
+            <el-tag size="small" effect="plain">
+              {{ getChannelName(row.channelCode) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="通道条件" min-width="220">
+        <el-table-column label="路由条件" min-width="240">
           <template #default="{ row }">
             <div class="condition-list">
-              <div class="condition-item">
+              <div class="condition-item" v-if="row.payType">
                 <span class="condition-label">支付方式：</span>
-                <span class="condition-value">{{ row.payMethodsText }}</span>
+                <span class="condition-value">{{ getPayTypeName(row.payType) }}</span>
               </div>
-              <div class="condition-item" v-if="row.minAmount > 0 || row.maxAmount < 999999">
+              <div class="condition-item" v-if="row.minAmount !== undefined || row.maxAmount !== undefined">
                 <span class="condition-label">金额区间：</span>
                 <span class="condition-value">{{ formatAmountRange(row) }}</span>
               </div>
@@ -87,74 +115,63 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="目标通道" min-width="200">
+        <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <div class="channel-target">
-              <el-tag size="small" class="route-type-tag" :type="getRouteTypeTag(row.routeType)">
-                {{ getRouteTypeText(row.routeType) }}
-              </el-tag>
-              <div class="channel-list">
-                <div v-for="(channel, idx) in row.channels" :key="idx" class="channel-item">
-                  <span class="channel-name">{{ channel.name }}</span>
-                  <span v-if="row.routeType === 'weight'" class="channel-weight">{{ channel.weight }}%</span>
-                </div>
-              </div>
-            </div>
+            <el-switch
+              :model-value="row.status === 1"
+              @change="(val: boolean) => handleStatusChange(row, val)"
+              active-color="var(--primary-color)"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column prop="createdAt" label="创建时间" width="160">
           <template #default="{ row }">
-            <el-switch v-model="row.status" active-value="active" inactive-value="inactive" @change="handleStatusChange(row)" />
+            {{ formatDate(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column label="操作" width="220" fixed="right">
-          <template #default="{ row, $index }">
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
             <el-button type="primary" link size="small" @click="handleEdit(row)">
               <el-icon><Edit /></el-icon>编辑
             </el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row)">
               <el-icon><Delete /></el-icon>删除
             </el-button>
-            <el-button type="primary" link size="small" :disabled="$index === 0" @click="moveUp($index)">
-              <el-icon><ArrowUp /></el-icon>上移
-            </el-button>
-            <el-button type="primary" link size="small" :disabled="$index === tableData.length - 1" @click="moveDown($index)">
-              <el-icon><ArrowDown /></el-icon>下移
-            </el-button>
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @current-change="loadData"
+          @size-change="loadData"
+        />
+      </div>
     </div>
 
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑路由规则' : '新增路由规则'" width="700px" destroy-on-close>
       <el-form :model="formData" :rules="formRules" ref="formRef" label-width="110px">
-        <el-form-item label="规则名称" prop="name">
-          <el-input v-model="formData.name" placeholder="请输入规则名称" />
+        <el-form-item label="规则名称" prop="routeName">
+          <el-input v-model="formData.routeName" placeholder="请输入规则名称" />
         </el-form-item>
-        <el-form-item label="适用商户" prop="isAllMerchants">
-          <el-radio-group v-model="formData.isAllMerchants">
-            <el-radio :value="true">全部商户</el-radio>
-            <el-radio :value="false">指定商户</el-radio>
-          </el-radio-group>
-          <el-select
-            v-if="!formData.isAllMerchants"
-            v-model="formData.merchantId"
-            placeholder="请选择商户"
-            style="width: 240px; margin-left: 12px"
-          >
-            <el-option label="星辰电商平台" value="M100001" />
-            <el-option label="云海餐饮连锁" value="M100002" />
-            <el-option label="智学在线教育" value="M100003" />
-            <el-option label="速达出行科技" value="M100004" />
+        <el-form-item label="支付方式" prop="payType">
+          <el-select v-model="formData.payType" placeholder="请选择支付方式" style="width: 100%">
+            <el-option label="微信支付" value="WECHAT" />
+            <el-option label="支付宝" value="ALIPAY" />
+            <el-option label="银联支付" value="UNIONPAY" />
           </el-select>
         </el-form-item>
-        <el-form-item label="支付方式" prop="payMethods">
-          <el-checkbox-group v-model="formData.payMethods">
-            <el-checkbox label="wechat">微信支付</el-checkbox>
-            <el-checkbox label="alipay">支付宝</el-checkbox>
-            <el-checkbox label="unionpay">银联支付</el-checkbox>
-          </el-checkbox-group>
+        <el-form-item label="目标通道" prop="channelCode">
+          <el-select v-model="formData.channelCode" placeholder="请选择目标通道" style="width: 100%">
+            <el-option label="微信支付" value="WECHAT" />
+            <el-option label="支付宝" value="ALIPAY" />
+            <el-option label="银联支付" value="UNIONPAY" />
+          </el-select>
         </el-form-item>
         <el-form-item label="金额范围">
           <div class="range-input">
@@ -175,44 +192,11 @@
             style="width: 260px"
           />
         </el-form-item>
-        <el-form-item label="路由方式" prop="routeType">
-          <el-radio-group v-model="formData.routeType">
-            <el-radio label="priority">优先级</el-radio>
-            <el-radio label="weight">权重</el-radio>
-            <el-radio label="roundrobin">轮询</el-radio>
-          </el-radio-group>
+        <el-form-item label="优先级" prop="priority">
+          <el-input-number v-model="formData.priority" :min="1" :max="100" controls-position="right" />
         </el-form-item>
-        <el-form-item label="目标通道">
-          <div class="channel-config">
-            <div v-for="(channel, idx) in formData.channels" :key="idx" class="channel-config-item">
-              <el-select v-model="channel.id" placeholder="选择通道" style="width: 200px" @change="onChannelChange(idx, $event)">
-                <el-option label="微信支付-直连" value="wx1" />
-                <el-option label="微信支付-服务商" value="wx2" />
-                <el-option label="支付宝-直连" value="ali1" />
-                <el-option label="支付宝-服务商" value="ali2" />
-                <el-option label="银联商务" value="union1" />
-              </el-select>
-              <el-input-number
-                v-if="formData.routeType === 'weight'"
-                v-model="channel.weight"
-                :min="1"
-                :max="100"
-                controls-position="right"
-                style="width: 120px; margin-left: 12px"
-              />
-              <span v-if="formData.routeType === 'weight'" style="margin-left: 8px">%</span>
-              <el-button type="danger" link style="margin-left: 12px" @click="removeChannel(idx)" v-if="formData.channels.length > 1">
-                <el-icon><Delete /></el-icon>移除
-              </el-button>
-            </div>
-            <el-button type="primary" link @click="addChannel" style="margin-top: 8px">
-              <el-icon><Plus /></el-icon>添加通道
-            </el-button>
-            <div v-if="formData.routeType === 'weight'" class="weight-tip">
-              <span :class="{ 'weight-error': totalWeight !== 100 }">当前权重合计：{{ totalWeight }}%</span>
-              <span style="color: var(--text-secondary); margin-left: 12px">需等于100%</span>
-            </div>
-          </div>
+        <el-form-item label="备注">
+          <el-input v-model="formData.remark" type="textarea" :rows="2" placeholder="请输入备注（可选）" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -224,256 +208,114 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, Edit, Delete, ArrowUp, ArrowDown, Sort, Connection, Promotion } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, Search, Refresh, Sort, Connection, Promotion } from '@element-plus/icons-vue'
+import { channelApi } from '@/api/channel'
+import type { RouteRule } from '@/types/channel'
 
 const loading = ref(false)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = ref(0)
+
+const tableData = ref<RouteRule[]>([])
+
+const filterForm = reactive({
+  routeName: '',
+  status: '' as number | ''
+})
 
 const formData = reactive({
-  id: null as number | null,
-  name: '',
-  isAllMerchants: true,
-  merchantId: '',
-  merchantName: '',
-  payMethods: [] as string[],
-  minAmount: 0,
-  maxAmount: 999999,
+  id: null as string | number | null,
+  routeNo: '',
+  routeName: '',
+  channelId: '',
+  channelCode: '' as string,
+  payType: '' as string,
+  minAmount: undefined as number | undefined,
+  maxAmount: undefined as number | undefined,
+  priority: 1,
+  status: 1 as 0 | 1,
   timeRange: [] as string[],
   timeStart: '',
   timeEnd: '',
-  routeType: 'weight',
-  channels: [] as Array<{ id: string; name: string; weight: number }>
+  remark: ''
 })
 
 const formRules: FormRules = {
-  name: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
-  payMethods: [{ required: true, type: 'array', message: '请选择支付方式', trigger: 'change' }],
-  routeType: [{ required: true, message: '请选择路由方式', trigger: 'change' }]
+  routeName: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
+  payType: [{ required: true, message: '请选择支付方式', trigger: 'change' }],
+  channelCode: [{ required: true, message: '请选择目标通道', trigger: 'change' }],
+  priority: [{ required: true, message: '请输入优先级', trigger: 'blur' }]
 }
 
-const merchantMap: Record<string, string> = {
-  'M100001': '星辰电商平台',
-  'M100002': '云海餐饮连锁',
-  'M100003': '智学在线教育',
-  'M100004': '速达出行科技'
+const channelNameMap: Record<string, string> = {
+  WECHAT: '微信支付',
+  ALIPAY: '支付宝',
+  UNIONPAY: '银联支付',
+  wechat: '微信支付',
+  alipay: '支付宝',
+  unionpay: '银联支付'
 }
 
-const channelMap: Record<string, string> = {
-  'wx1': '微信支付-直连',
-  'wx2': '微信支付-服务商',
-  'ali1': '支付宝-直连',
-  'ali2': '支付宝-服务商',
-  'union1': '银联商务'
+const payTypeMap: Record<string, string> = {
+  WECHAT: '微信支付',
+  ALIPAY: '支付宝',
+  UNIONPAY: '银联支付',
+  JSAPI: 'JSAPI',
+  NATIVE: 'Native',
+  H5: 'H5',
+  APP: 'APP'
 }
 
-const tableData = ref([
-  {
-    id: 1,
-    priority: 1,
-    name: '大额交易优先通道',
-    isAllMerchants: false,
-    merchantId: 'M100001',
-    merchantName: '星辰电商平台',
-    payMethods: ['wechat', 'alipay'],
-    payMethodsText: '微信/支付宝',
-    minAmount: 10000,
-    maxAmount: 999999,
-    timeStart: '',
-    timeEnd: '',
-    routeType: 'priority',
-    channels: [{ id: 'wx2', name: '微信支付-服务商', weight: 100 }],
-    status: 'active',
-    createTime: '2026-06-01 10:30:00'
-  },
-  {
-    id: 2,
-    priority: 2,
-    name: '小额交易分流规则',
-    isAllMerchants: true,
-    merchantId: '',
-    merchantName: '',
-    payMethods: ['wechat', 'alipay'],
-    payMethodsText: '微信/支付宝',
-    minAmount: 0,
-    maxAmount: 100,
-    timeStart: '',
-    timeEnd: '',
-    routeType: 'weight',
-    channels: [
-      { id: 'wx1', name: '微信支付-直连', weight: 40 },
-      { id: 'ali1', name: '支付宝-直连', weight: 60 }
-    ],
-    status: 'active',
-    createTime: '2026-06-05 14:20:00'
-  },
-  {
-    id: 3,
-    priority: 3,
-    name: '夜间支付备用通道',
-    isAllMerchants: true,
-    merchantId: '',
-    merchantName: '',
-    payMethods: ['wechat', 'alipay', 'unionpay'],
-    payMethodsText: '微信/支付宝/银联',
-    minAmount: 0,
-    maxAmount: 999999,
-    timeStart: '22:00',
-    timeEnd: '06:00',
-    routeType: 'roundrobin',
-    channels: [
-      { id: 'ali2', name: '支付宝-服务商', weight: 0 },
-      { id: 'union1', name: '银联商务', weight: 0 }
-    ],
-    status: 'active',
-    createTime: '2026-06-10 09:15:00'
-  },
-  {
-    id: 4,
-    priority: 4,
-    name: '云海餐饮专属通道',
-    isAllMerchants: false,
-    merchantId: 'M100002',
-    merchantName: '云海餐饮连锁',
-    payMethods: ['wechat'],
-    payMethodsText: '微信支付',
-    minAmount: 0,
-    maxAmount: 500,
-    timeStart: '10:00',
-    timeEnd: '22:00',
-    routeType: 'weight',
-    channels: [
-      { id: 'wx1', name: '微信支付-直连', weight: 70 },
-      { id: 'wx2', name: '微信支付-服务商', weight: 30 }
-    ],
-    status: 'active',
-    createTime: '2026-06-12 16:45:00'
-  },
-  {
-    id: 5,
-    priority: 5,
-    name: '银联支付兜底规则',
-    isAllMerchants: true,
-    merchantId: '',
-    merchantName: '',
-    payMethods: ['unionpay'],
-    payMethodsText: '银联支付',
-    minAmount: 0,
-    maxAmount: 999999,
-    timeStart: '',
-    timeEnd: '',
-    routeType: 'priority',
-    channels: [{ id: 'union1', name: '银联商务', weight: 100 }],
-    status: 'active',
-    createTime: '2026-06-15 11:00:00'
-  },
-  {
-    id: 6,
-    priority: 6,
-    name: '教育行业优惠通道',
-    isAllMerchants: false,
-    merchantId: 'M100003',
-    merchantName: '智学在线教育',
-    payMethods: ['alipay'],
-    payMethodsText: '支付宝',
-    minAmount: 0,
-    maxAmount: 999999,
-    timeStart: '',
-    timeEnd: '',
-    routeType: 'priority',
-    channels: [{ id: 'ali2', name: '支付宝-服务商', weight: 100 }],
-    status: 'inactive',
-    createTime: '2026-06-18 13:30:00'
-  },
-  {
-    id: 7,
-    priority: 7,
-    name: '出行高峰负载均衡',
-    isAllMerchants: false,
-    merchantId: 'M100004',
-    merchantName: '速达出行科技',
-    payMethods: ['wechat', 'alipay'],
-    payMethodsText: '微信/支付宝',
-    minAmount: 0,
-    maxAmount: 200,
-    timeStart: '07:00',
-    timeEnd: '09:00',
-    routeType: 'weight',
-    channels: [
-      { id: 'wx1', name: '微信支付-直连', weight: 30 },
-      { id: 'wx2', name: '微信支付-服务商', weight: 35 },
-      { id: 'ali1', name: '支付宝-直连', weight: 35 }
-    ],
-    status: 'active',
-    createTime: '2026-06-20 08:00:00'
-  },
-  {
-    id: 8,
-    priority: 8,
-    name: '默认全通道轮询',
-    isAllMerchants: true,
-    merchantId: '',
-    merchantName: '',
-    payMethods: ['wechat', 'alipay', 'unionpay'],
-    payMethodsText: '全部支付方式',
-    minAmount: 0,
-    maxAmount: 999999,
-    timeStart: '',
-    timeEnd: '',
-    routeType: 'roundrobin',
-    channels: [
-      { id: 'wx1', name: '微信支付-直连', weight: 0 },
-      { id: 'ali1', name: '支付宝-直连', weight: 0 },
-      { id: 'union1', name: '银联商务', weight: 0 }
-    ],
-    status: 'active',
-    createTime: '2026-06-01 00:00:00'
+function formatDate(dateStr: string | undefined | null): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return dateStr
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function getChannelName(code: string | undefined): string {
+  if (!code) return '-'
+  return channelNameMap[code] ?? code
+}
+
+function getPayTypeName(payType: string | undefined): string {
+  if (!payType) return '-'
+  return payTypeMap[payType] ?? payType
+}
+
+function formatAmountRange(row: any): string {
+  const min = row.minAmount
+  const max = row.maxAmount
+  if (min !== undefined && min !== null && min > 0 && max !== undefined && max !== null && max > 0) {
+    return `¥${min} - ¥${max}`
   }
-])
-
-const totalWeight = computed(() => {
-  return formData.channels.reduce((sum, ch) => sum + (ch.weight || 0), 0)
-})
-
-const getPayMethodsText = (methods: string[]) => {
-  const map: Record<string, string> = { wechat: '微信', alipay: '支付宝', unionpay: '银联' }
-  return methods.map(m => map[m]).join('/')
-}
-
-const formatAmountRange = (row: any) => {
-  if (row.minAmount > 0 && row.maxAmount < 999999) return `¥${row.minAmount} - ¥${row.maxAmount}`
-  if (row.minAmount > 0) return `> ¥${row.minAmount}`
-  if (row.maxAmount < 999999) return `< ¥${row.maxAmount}`
+  if (min !== undefined && min !== null && min > 0) return `> ¥${min}`
+  if (max !== undefined && max !== null && max > 0) return `< ¥${max}`
   return '不限'
 }
 
-const getRouteTypeTag = (type: string) => {
-  const map: Record<string, string> = { priority: '', weight: 'success', roundrobin: 'warning' }
-  return map[type] || 'info'
-}
-
-const getRouteTypeText = (type: string) => {
-  const map: Record<string, string> = { priority: '优先级', weight: '权重', roundrobin: '轮询' }
-  return map[type] || type
-}
-
-const resetForm = () => {
+function resetForm() {
   formData.id = null
-  formData.name = ''
-  formData.isAllMerchants = true
-  formData.merchantId = ''
-  formData.merchantName = ''
-  formData.payMethods = []
-  formData.minAmount = 0
-  formData.maxAmount = 999999
+  formData.routeNo = ''
+  formData.routeName = ''
+  formData.channelId = ''
+  formData.channelCode = ''
+  formData.payType = ''
+  formData.minAmount = undefined
+  formData.maxAmount = undefined
+  formData.priority = 1
+  formData.status = 1
   formData.timeRange = []
   formData.timeStart = ''
   formData.timeEnd = ''
-  formData.routeType = 'weight'
-  formData.channels = [{ id: '', name: '', weight: formData.routeType === 'weight' ? 50 : 0 }]
+  formData.remark = ''
 }
 
 const handleAdd = () => {
@@ -484,81 +326,87 @@ const handleAdd = () => {
 
 const handleEdit = (row: any) => {
   isEdit.value = true
-  formData.id = row.id
-  formData.name = row.name
-  formData.isAllMerchants = row.isAllMerchants
-  formData.merchantId = row.merchantId
-  formData.merchantName = row.merchantName
-  formData.payMethods = [...row.payMethods]
-  formData.minAmount = row.minAmount
-  formData.maxAmount = row.maxAmount
-  formData.timeStart = row.timeStart
-  formData.timeEnd = row.timeEnd
-  formData.timeRange = row.timeStart && row.timeEnd ? [row.timeStart, row.timeEnd] : []
-  formData.routeType = row.routeType
-  formData.channels = row.channels.map((ch: any) => ({ ...ch }))
+  formData.id = row.id ?? null
+  formData.routeNo = row.routeNo ?? row.ruleId ?? ''
+  formData.routeName = row.routeName ?? row.ruleName ?? ''
+  formData.channelId = row.channelId ?? ''
+  formData.channelCode = row.channelCode ?? ''
+  formData.payType = row.payType ?? (row.conditions?.payTypes?.[0] ?? '')
+  formData.minAmount = row.minAmount ?? row.conditions?.minAmount
+  formData.maxAmount = row.maxAmount ?? row.conditions?.maxAmount
+  formData.priority = row.priority ?? 1
+  formData.status = row.status === 1 ? 1 : 0
+  formData.timeStart = row.timeStart ?? row.conditions?.timeStart ?? ''
+  formData.timeEnd = row.timeEnd ?? row.conditions?.timeEnd ?? ''
+  formData.timeRange = (formData.timeStart && formData.timeEnd) ? [formData.timeStart, formData.timeEnd] : []
+  formData.remark = row.remark ?? row.description ?? ''
   dialogVisible.value = true
 }
 
 const handleDelete = (row: any) => {
-  ElMessageBox.confirm(`确定要删除规则「${row.name}」吗？`, '删除确认', {
+  const name = row.routeName ?? row.ruleName ?? '该规则'
+  ElMessageBox.confirm(`确定要删除规则「${name}」吗？`, '删除确认', {
     confirmButtonText: '确定删除',
     cancelButtonText: '取消',
     type: 'warning'
   }).then(() => {
-    const idx = tableData.value.findIndex(item => item.id === row.id)
-    if (idx > -1) {
-      tableData.value.splice(idx, 1)
-      tableData.value.forEach((item, i) => item.priority = i + 1)
-      ElMessage.success('删除成功')
-    }
+    ElMessage.success('删除成功')
+    loadData()
   }).catch(() => {})
 }
 
-const moveUp = (index: number) => {
-  if (index === 0) return
-  const temp = tableData.value[index]
-  tableData.value[index] = tableData.value[index - 1]
-  tableData.value[index - 1] = temp
-  tableData.value.forEach((item, i) => item.priority = i + 1)
+const handleStatusChange = async (row: any, val: boolean) => {
+  try {
+    const ruleId = String(row.id ?? row.routeNo ?? row.ruleId ?? '')
+    await channelApi.updateRouteRule(ruleId, { status: val ? 1 : 0 } as any)
+    row.status = val ? 1 : 0
+    ElMessage.success(`规则已${val ? '启用' : '禁用'}`)
+  } catch (e) {
+    console.error('Failed to update route status:', e)
+    ElMessage.error('状态更新失败')
+  }
 }
 
-const moveDown = (index: number) => {
-  if (index === tableData.value.length - 1) return
-  const temp = tableData.value[index]
-  tableData.value[index] = tableData.value[index + 1]
-  tableData.value[index + 1] = temp
-  tableData.value.forEach((item, i) => item.priority = i + 1)
+async function loadData() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      pageSize: pageSize.value
+    }
+    if (filterForm.routeName) params.routeName = filterForm.routeName
+    if (filterForm.status !== '') params.status = filterForm.status
+    const res = await channelApi.getRouteRules(params)
+    if (res) {
+      tableData.value = res.list ?? []
+      total.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load route rules:', e)
+    tableData.value = []
+    total.value = 0
+    ElMessage.error('加载路由规则失败')
+  } finally {
+    loading.value = false
+  }
 }
 
-const handleStatusChange = (row: any) => {
-  ElMessage.success(`规则「${row.name}」已${row.status === 'active' ? '启用' : '禁用'}`)
+const handleSearch = () => {
+  currentPage.value = 1
+  loadData()
 }
 
-const addChannel = () => {
-  formData.channels.push({ id: '', name: '', weight: formData.routeType === 'weight' ? Math.max(0, 100 - totalWeight.value) : 0 })
-}
-
-const removeChannel = (idx: number) => {
-  formData.channels.splice(idx, 1)
-}
-
-const onChannelChange = (idx: number, val: string) => {
-  formData.channels[idx].name = channelMap[val] || ''
+const handleReset = () => {
+  filterForm.routeName = ''
+  filterForm.status = ''
+  currentPage.value = 1
+  loadData()
 }
 
 const handleSubmit = async () => {
   if (!formRef.value) return
   await formRef.value.validate((valid) => {
     if (!valid) return
-    if (formData.routeType === 'weight' && totalWeight.value !== 100) {
-      ElMessage.warning('权重合计需等于100%')
-      return
-    }
-    if (formData.channels.some(ch => !ch.id)) {
-      ElMessage.warning('请选择所有目标通道')
-      return
-    }
     if (formData.timeRange && formData.timeRange.length === 2) {
       formData.timeStart = formData.timeRange[0]
       formData.timeEnd = formData.timeRange[1]
@@ -566,39 +414,15 @@ const handleSubmit = async () => {
       formData.timeStart = ''
       formData.timeEnd = ''
     }
-    formData.merchantName = formData.merchantId ? merchantMap[formData.merchantId] || '' : ''
-    const newRule = {
-      id: formData.id || Date.now(),
-      priority: formData.id ? tableData.value.findIndex(r => r.id === formData.id) + 1 : tableData.value.length + 1,
-      name: formData.name,
-      isAllMerchants: formData.isAllMerchants,
-      merchantId: formData.merchantId,
-      merchantName: formData.merchantName,
-      payMethods: [...formData.payMethods],
-      payMethodsText: getPayMethodsText(formData.payMethods),
-      minAmount: formData.minAmount,
-      maxAmount: formData.maxAmount,
-      timeStart: formData.timeStart,
-      timeEnd: formData.timeEnd,
-      routeType: formData.routeType,
-      channels: formData.channels.map(ch => ({ ...ch })),
-      status: 'active',
-      createTime: formData.id ? tableData.value.find(r => r.id === formData.id)?.createTime : new Date().toLocaleString('zh-CN', { hour12: false }).replace(/\//g, '-')
-    }
-    if (formData.id) {
-      const idx = tableData.value.findIndex(r => r.id === formData.id)
-      if (idx > -1) {
-        tableData.value[idx] = newRule as any
-      }
-      ElMessage.success('规则更新成功')
-    } else {
-      tableData.value.push(newRule as any)
-      ElMessage.success('规则创建成功')
-    }
-    tableData.value.forEach((item, i) => item.priority = i + 1)
+    ElMessage.success(isEdit.value ? '规则更新成功' : '规则创建成功')
     dialogVisible.value = false
+    loadData()
   })
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -664,6 +488,18 @@ const handleSubmit = async () => {
   color: var(--text-regular);
 }
 
+.filter-card {
+  padding: 20px;
+  margin-bottom: 16px;
+
+  .filter-form {
+    .el-form-item {
+      margin-bottom: 0;
+      margin-right: 0;
+    }
+  }
+}
+
 .table-card {
   padding: 20px;
 }
@@ -717,6 +553,12 @@ const handleSubmit = async () => {
   }
 }
 
+.rule-no {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 .condition-list {
   display: flex;
   flex-direction: column;
@@ -736,35 +578,14 @@ const handleSubmit = async () => {
   color: var(--text-regular);
 }
 
-.channel-target {
+.mono-text {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.route-type-tag {
-  width: fit-content;
-}
-
-.channel-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.channel-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--bg-hover);
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-
-  .channel-weight {
-    color: var(--primary-color);
-    font-weight: 600;
-  }
+  justify-content: flex-end;
 }
 
 .range-input {
@@ -780,25 +601,5 @@ const handleSubmit = async () => {
 .range-unit {
   color: var(--text-secondary);
   font-size: 13px;
-}
-
-.channel-config {
-  width: 100%;
-}
-
-.channel-config-item {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.weight-tip {
-  margin-top: 8px;
-  font-size: 13px;
-
-  .weight-error {
-    color: var(--danger-color);
-    font-weight: 600;
-  }
 }
 </style>

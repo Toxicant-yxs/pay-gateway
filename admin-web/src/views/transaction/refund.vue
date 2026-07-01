@@ -49,17 +49,16 @@
           </el-col>
           <el-col :span="6">
             <el-form-item label="商户号">
-              <el-input v-model="filterForm.merchantId" placeholder="请输入商户号" clearable />
+              <el-input v-model="filterForm.merchantNo" placeholder="请输入商户号" clearable />
             </el-form-item>
           </el-col>
           <el-col :span="6">
             <el-form-item label="退款状态">
               <el-select v-model="filterForm.status" placeholder="全部状态" clearable style="width: 100%">
-                <el-option label="待审核" value="pending" />
-                <el-option label="退款中" value="processing" />
-                <el-option label="退款成功" value="success" />
-                <el-option label="退款失败" value="failed" />
-                <el-option label="已拒绝" value="rejected" />
+                <el-option label="退款中" :value="0" />
+                <el-option label="退款成功" :value="1" />
+                <el-option label="退款失败" :value="2" />
+                <el-option label="已拒绝" :value="3" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -67,25 +66,14 @@
         <el-row :gutter="20" v-show="showMoreFilter">
           <el-col :span="6">
             <el-form-item label="支付通道">
-              <el-select v-model="filterForm.channel" placeholder="全部通道" clearable style="width: 100%">
-                <el-option label="微信支付" value="wechat" />
-                <el-option label="支付宝" value="alipay" />
-                <el-option label="银联支付" value="unionpay" />
-                <el-option label="Visa/MC" value="card" />
+              <el-select v-model="filterForm.channelCode" placeholder="全部通道" clearable style="width: 100%">
+                <el-option label="微信支付" value="WECHAT" />
+                <el-option label="支付宝" value="ALIPAY" />
+                <el-option label="银联支付" value="UNIONPAY" />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="6">
-            <el-form-item label="退款原因">
-              <el-select v-model="filterForm.reason" placeholder="全部原因" clearable style="width: 100%">
-                <el-option label="用户申请" value="user_request" />
-                <el-option label="重复支付" value="duplicate" />
-                <el-option label="商品问题" value="product_issue" />
-                <el-option label="其他原因" value="other" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
+          <el-col :span="18">
             <el-form-item label="申请时间">
               <el-date-picker
                 v-model="filterForm.dateRange"
@@ -141,10 +129,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="merchantName" label="商户名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="channel" label="支付通道" width="110">
+        <el-table-column prop="channelCode" label="支付通道" width="110">
           <template #default="{ row }">
-            <el-tag size="small" effect="plain" :color="getChannelColor(row.channel)" style="color: #fff; border: none">
-              {{ row.channel }}
+            <el-tag size="small" effect="plain" :color="getChannelColor(row.channelCode)" style="color: #fff; border: none">
+              {{ getChannelName(row.channelCode) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -170,8 +158,6 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
-            <el-button type="success" link size="small" v-if="row.status === 'pending'" @click="handleApprove(row)">同意</el-button>
-            <el-button type="danger" link size="small" v-if="row.status === 'pending'" @click="handleReject(row)">拒绝</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -195,13 +181,12 @@
       :destroy-on-close="true"
     >
       <div v-if="currentRefund" class="refund-detail">
-        <div class="detail-status-bar" :class="currentRefund.status">
+        <div class="detail-status-bar" :class="currentRefund.statusKey">
           <div class="status-icon">
             <el-icon :size="40" color="#fff">
-              <CircleCheck v-if="currentRefund.status === 'success'" />
-              <CircleClose v-else-if="currentRefund.status === 'failed' || currentRefund.status === 'rejected'" />
-              <Clock v-else-if="currentRefund.status === 'pending' || currentRefund.status === 'processing'" />
-              <Warning v-else />
+              <CircleCheck v-if="currentRefund.status === 1" />
+              <CircleClose v-else-if="currentRefund.status === 2 || currentRefund.status === 3" />
+              <Clock v-else />
             </el-icon>
           </div>
           <div class="status-info">
@@ -219,30 +204,24 @@
               <el-descriptions-item label="原订单号" :span="2">
                 <span class="mono-text">{{ currentRefund.orderNo }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="商户名称">{{ currentRefund.merchantName }}</el-descriptions-item>
-              <el-descriptions-item label="商户号">
-                <span class="mono-text">{{ currentRefund.merchantId }}</span>
+              <el-descriptions-item label="商户号" :span="2">
+                <span class="mono-text">{{ currentRefund.merchantNo }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="支付通道">{{ currentRefund.channel }}</el-descriptions-item>
-              <el-descriptions-item label="原订单金额">
-                <span class="amount-text">CNY {{ formatNumber(currentRefund.orderAmount) }}</span>
-              </el-descriptions-item>
+              <el-descriptions-item label="支付通道">{{ getChannelName(currentRefund.channelCode) }}</el-descriptions-item>
               <el-descriptions-item label="退款金额" label-style="color: var(--danger-color)">
                 <span class="amount-text" style="color: var(--danger-color)">CNY {{ formatNumber(currentRefund.refundAmount) }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="退款原因">{{ currentRefund.refundReason }}</el-descriptions-item>
-              <el-descriptions-item label="申请人">{{ currentRefund.applicant }}</el-descriptions-item>
+              <el-descriptions-item label="退款手续费">CNY {{ formatNumber(currentRefund.refundFee) }}</el-descriptions-item>
+              <el-descriptions-item label="退款原因" :span="2">{{ currentRefund.refundReason || '-' }}</el-descriptions-item>
               <el-descriptions-item label="申请时间">{{ currentRefund.applyTime }}</el-descriptions-item>
               <el-descriptions-item label="完成时间">{{ currentRefund.finishTime || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="退款备注" :span="2">{{ currentRefund.remark || '-' }}</el-descriptions-item>
             </el-descriptions>
 
             <el-descriptions title="渠道信息" :column="2" border class="info-section" style="margin-top: 20px">
               <el-descriptions-item label="渠道退款号">
                 <span class="mono-text">{{ currentRefund.channelRefundNo || '-' }}</span>
               </el-descriptions-item>
-              <el-descriptions-item label="渠道返回码">{{ currentRefund.channelCode || '-' }}</el-descriptions-item>
-              <el-descriptions-item label="渠道返回信息" :span="2">{{ currentRefund.channelMsg || '-' }}</el-descriptions-item>
+              <el-descriptions-item label="渠道返回信息" :span="2">{{ currentRefund.channelResponse || '-' }}</el-descriptions-item>
             </el-descriptions>
           </el-tab-pane>
           <el-tab-pane label="操作日志" name="logs">
@@ -262,17 +241,6 @@
             </el-timeline>
           </el-tab-pane>
         </el-tabs>
-
-        <div class="detail-actions" v-if="currentRefund.status === 'pending'">
-          <el-button type="success" @click="handleApprove(currentRefund)">
-            <el-icon><CircleCheck /></el-icon>
-            同意退款
-          </el-button>
-          <el-button type="danger" @click="handleReject(currentRefund)">
-            <el-icon><CircleClose /></el-icon>
-            拒绝退款
-          </el-button>
-        </div>
       </div>
     </el-drawer>
 
@@ -296,9 +264,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, ArrowDown, Search, Refresh, RefreshLeft, Money, Warning, Document, CircleCheck, CircleClose, Clock } from '@element-plus/icons-vue'
+import { refundApi } from '@/api/transaction'
+import type { RefundOrder } from '@/types/transaction'
 
 const loading = ref(false)
 const showMoreFilter = ref(false)
@@ -306,7 +276,7 @@ const drawerVisible = ref(false)
 const rejectDialogVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(156)
+const total = ref(0)
 const selectedRows = ref<any[]>([])
 const currentRefund = ref<any>(null)
 const activeTab = ref('refund')
@@ -314,68 +284,127 @@ const activeTab = ref('refund')
 const filterForm = reactive({
   refundNo: '',
   orderNo: '',
-  merchantId: '',
-  channel: '',
-  status: '',
-  reason: '',
-  dateRange: []
+  merchantNo: '',
+  channelCode: '',
+  status: '' as number | string,
+  dateRange: [] as string[]
 })
 
 const rejectForm = reactive({
   reason: ''
 })
 
-const statsData = [
-  { label: '今日退款笔数', value: '86', color: 'var(--primary-color)', bgColor: 'rgba(22, 119, 255, 0.1)', icon: Document },
-  { label: '今日退款金额', value: '¥48,632', color: 'var(--danger-color)', bgColor: 'rgba(245, 63, 63, 0.1)', icon: Money },
-  { label: '退款成功率', value: '96.8%', color: 'var(--success-color)', bgColor: 'rgba(0, 180, 42, 0.1)', icon: RefreshLeft },
-  { label: '待处理退款', value: '12', color: 'var(--warning-color)', bgColor: 'rgba(255, 125, 0, 0.1)', icon: Warning }
-]
-
-const tableData = ref([
-  { refundNo: 'REF20260629000100001', orderNo: 'PAY20260628000123456', merchantName: '星辰电商平台', merchantId: 'M100001', channel: '微信支付', orderAmount: 29900, refundAmount: 29900, refundReason: '用户申请退款', status: 'pending', applicant: '张三', applyTime: '2026-06-29 09:15:32', finishTime: null, remark: '用户不想要了', channelRefundNo: null, channelCode: null, channelMsg: null },
-  { refundNo: 'REF20260629000100002', orderNo: 'PAY20260628000123455', merchantName: '云海餐饮连锁', merchantId: 'M100002', channel: '支付宝', orderAmount: 128000, refundAmount: 64000, refundReason: '商品问题', status: 'processing', applicant: '李四', applyTime: '2026-06-29 08:45:20', finishTime: null, remark: '部分菜品缺货', channelRefundNo: null, channelCode: null, channelMsg: null },
-  { refundNo: 'REF20260629000100003', orderNo: 'PAY20260628000123453', merchantName: '智学在线教育', merchantId: 'M100003', channel: '微信支付', orderAmount: 9900, refundAmount: 9900, refundReason: '重复支付', status: 'success', applicant: '王五', applyTime: '2026-06-29 07:30:15', finishTime: '2026-06-29 07:32:08', remark: '用户不小心支付了两次', channelRefundNo: '500001234202606291234567890', channelCode: 'SUCCESS', channelMsg: '退款成功' },
-  { refundNo: 'REF20260628000100004', orderNo: 'PAY20260627000123400', merchantName: '速达出行科技', merchantId: 'M100004', channel: '银联支付', orderAmount: 156000, refundAmount: 156000, refundReason: '其他原因', status: 'failed', applicant: '赵六', applyTime: '2026-06-28 16:20:45', finishTime: '2026-06-28 16:25:33', remark: '渠道账户余额不足', channelRefundNo: '2026062812345678', channelCode: 'INSUFFICIENT_BALANCE', channelMsg: '退款账户余额不足' },
-  { refundNo: 'REF20260628000100005', orderNo: 'PAY20260627000123401', merchantName: '趣玩数字娱乐', merchantId: 'M100005', channel: '支付宝', orderAmount: 45600, refundAmount: 45600, refundReason: '用户申请退款', status: 'rejected', applicant: '钱七', applyTime: '2026-06-28 14:10:22', finishTime: '2026-06-28 14:30:18', remark: '游戏道具已使用，不符合退款条件', channelRefundNo: null, channelCode: null, channelMsg: null },
-  { refundNo: 'REF20260628000100006', orderNo: 'PAY20260627000123402', merchantName: '某跨境电商', merchantId: 'M100007', channel: 'Visa/MC', orderAmount: 56800, refundAmount: 28400, refundReason: '商品问题', status: 'success', applicant: 'John', applyTime: '2026-06-28 11:05:33', finishTime: '2026-06-28 11:10:45', remark: '商品有破损，部分退款', channelRefundNo: 'REF2026062812345', channelCode: '0000', channelMsg: 'Refund Success' },
-  { refundNo: 'REF20260628000100007', orderNo: 'PAY20260627000123403', merchantName: '星辰电商平台', merchantId: 'M100001', channel: '微信支付', orderAmount: 19900, refundAmount: 19900, refundReason: '用户申请退款', status: 'pending', applicant: '孙八', applyTime: '2026-06-28 10:30:00', finishTime: null, remark: '7天无理由退款', channelRefundNo: null, channelCode: null, channelMsg: null },
-  { refundNo: 'REF20260628000100008', orderNo: 'PAY20260626000123350', merchantName: '云海餐饮连锁', merchantId: 'M100002', channel: '支付宝', orderAmount: 35600, refundAmount: 35600, refundReason: '重复支付', status: 'success', applicant: '周九', applyTime: '2026-06-28 09:15:28', finishTime: '2026-06-28 09:18:52', remark: '网络问题导致重复扣款', channelRefundNo: '2026062822001234567890', channelCode: '10000', channelMsg: 'Success' },
-  { refundNo: 'REF20260628000100009', orderNo: 'PAY20260626000123351', merchantName: '智学在线教育', merchantId: 'M100003', channel: '微信支付', orderAmount: 29900, refundAmount: 29900, refundReason: '其他原因', status: 'processing', applicant: '吴十', applyTime: '2026-06-28 08:00:15', finishTime: null, remark: '课程内容与描述不符', channelRefundNo: null, channelCode: null, channelMsg: null },
-  { refundNo: 'REF20260627000100010', orderNo: 'PAY20260626000123352', merchantName: '康美医疗健康', merchantId: 'M100006', channel: '微信支付', orderAmount: 89900, refundAmount: 89900, refundReason: '用户申请退款', status: 'success', applicant: '郑十一', applyTime: '2026-06-27 20:45:30', finishTime: '2026-06-27 20:50:22', remark: '服务预约取消', channelRefundNo: '4200001234202606271234567890', channelCode: 'SUCCESS', channelMsg: '退款成功' }
-])
-
-const operationLogs = ref([
-  { time: '2026-06-29 09:15:32', title: '提交退款申请', operator: '张三', type: 'primary' },
-  { time: '2026-06-29 09:16:00', title: '系统自动校验', desc: '订单信息校验通过', type: 'success' }
-])
-
-const formatNumber = (num: number) => (num / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
-
-const getChannelColor = (channel: string) => {
-  const map: Record<string, string> = { '微信支付': '#07C160', '支付宝': '#1677FF', '银联支付': '#E60012', 'Visa/MC': '#1A1F71' }
-  return map[channel] || 'var(--primary-color)'
+const CHANNEL_NAME_MAP: Record<string, string> = {
+  WECHAT: '微信支付',
+  ALIPAY: '支付宝',
+  UNIONPAY: '银联支付'
 }
 
-const getStatusType = (status: string) => {
-  const map: Record<string, string> = { success: 'success', pending: 'warning', processing: '', failed: 'danger', rejected: 'info' }
-  return map[status] || 'info'
+const REFUND_STATUS_MAP: Record<number, { text: string; type: string; key: string }> = {
+  0: { text: '退款中', type: 'warning', key: 'processing' },
+  1: { text: '退款成功', type: 'success', key: 'success' },
+  2: { text: '退款失败', type: 'danger', key: 'failed' },
+  3: { text: '已拒绝', type: 'info', key: 'rejected' }
 }
 
-const getStatusText = (status: string) => {
-  const map: Record<string, string> = { success: '退款成功', pending: '待审核', processing: '退款中', failed: '退款失败', rejected: '已拒绝' }
-  return map[status] || '未知'
+const statsData = computed(() => {
+  const list = tableData.value
+  const todayCount = list.length
+  const todayAmount = list.reduce((s, r) => s + (r.refundAmount || 0), 0)
+  const successCount = list.filter(r => r.status === 1).length
+  const pendingCount = list.filter(r => r.status === 0).length
+  const successRate = todayCount > 0 ? ((successCount / todayCount) * 100).toFixed(1) + '%' : '0%'
+  return [
+    { label: '退款笔数', value: String(total.value), color: 'var(--primary-color)', bgColor: 'rgba(22, 119, 255, 0.1)', icon: Document },
+    { label: '退款金额', value: '¥' + todayAmount.toFixed(2), color: 'var(--danger-color)', bgColor: 'rgba(245, 63, 63, 0.1)', icon: Money },
+    { label: '退款成功率', value: successRate, color: 'var(--success-color)', bgColor: 'rgba(0, 180, 42, 0.1)', icon: RefreshLeft },
+    { label: '处理中退款', value: String(pendingCount), color: 'var(--warning-color)', bgColor: 'rgba(255, 125, 0, 0.1)', icon: Warning }
+  ]
+})
+
+const tableData = ref<RefundOrder[]>([])
+
+const operationLogs = ref<any[]>([])
+
+const formatNumber = (num: number | undefined) => {
+  if (num === undefined || num === null) return '0.00'
+  return Number(num).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+const getChannelName = (code: string) => CHANNEL_NAME_MAP[code] || code || '-'
+const getChannelColor = (code: string) => {
+  const map: Record<string, string> = { WECHAT: '#07C160', ALIPAY: '#1677FF', UNIONPAY: '#E60012' }
+  return map[code] || 'var(--primary-color)'
+}
+
+const getStatusType = (status: number) => REFUND_STATUS_MAP[status]?.type || 'info'
+const getStatusText = (status: number) => REFUND_STATUS_MAP[status]?.text || '未知'
+const getStatusKey = (status: number) => REFUND_STATUS_MAP[status]?.key || 'unknown'
+
+function formatDate(dt: string | undefined): string {
+  if (!dt) return '-'
+  try {
+    const d = new Date(dt)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  } catch { return dt }
+}
+
+function mapRow(r: RefundOrder) {
+  return {
+    ...r,
+    channel: getChannelName(r.channelCode || ''),
+    channelDisplay: r.channelCode,
+    merchantName: r.merchantNo || '-',
+    statusKey: getStatusKey(r.status ?? 0),
+    applyTime: formatDate(r.createdAt),
+    finishTime: r.refundedAt ? formatDate(r.refundedAt) : null
+  }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const params: any = {
+      page: currentPage.value,
+      pageSize: pageSize.value
+    }
+    if (filterForm.refundNo) params.refundNo = filterForm.refundNo
+    if (filterForm.orderNo) params.orderNo = filterForm.orderNo
+    if (filterForm.merchantNo) params.merchantNo = filterForm.merchantNo
+    if (filterForm.channelCode) params.channelCode = filterForm.channelCode
+    if (filterForm.status !== '' && filterForm.status !== undefined && filterForm.status !== null) {
+      params.status = filterForm.status
+    }
+    if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+      params.startTime = filterForm.dateRange[0]
+      params.endTime = filterForm.dateRange[1]
+    }
+    const res = await refundApi.getList(params)
+    if (res) {
+      tableData.value = (res.list ?? []).map(mapRow)
+      total.value = res.total ?? 0
+    }
+  } catch (e) {
+    console.error('Failed to load refunds:', e)
+    tableData.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleSearch = () => {
-  loading.value = true
-  setTimeout(() => loading.value = false, 500)
+  currentPage.value = 1
+  loadData()
 }
 
 const handleReset = () => {
   Object.keys(filterForm).forEach(key => {
     (filterForm as any)[key] = key === 'dateRange' ? [] : ''
   })
+  currentPage.value = 1
+  loadData()
 }
 
 const handleSelectionChange = (rows: any[]) => {
@@ -391,24 +420,20 @@ const viewDetail = (row: any) => {
 
 const generateLogs = (row: any) => {
   const logs: any[] = [
-    { time: row.applyTime, title: '提交退款申请', operator: row.applicant, type: 'primary' },
-    { time: row.applyTime, title: '系统自动校验', desc: '订单信息校验通过', type: 'success' }
+    { time: row.applyTime, title: '提交退款申请', type: 'primary' }
   ]
-  if (row.status === 'processing') {
-    logs.unshift({ time: row.applyTime, title: '审核通过，发起退款', operator: '系统管理员', type: 'success' })
+  if (row.statusKey === 'processing') {
+    logs.push({ time: row.applyTime, title: '审核通过，发起退款', type: 'success' })
   }
-  if (row.status === 'success') {
-    logs.unshift({ time: row.finishTime, title: '退款成功', desc: '渠道返回退款成功', type: 'success' })
-    logs.unshift({ time: row.applyTime, title: '审核通过，发起退款', operator: '系统管理员', type: 'success' })
+  if (row.statusKey === 'success') {
+    logs.push({ time: row.applyTime, title: '审核通过，发起退款', type: 'success' })
+    logs.push({ time: row.finishTime, title: '退款成功', desc: '渠道返回退款成功', type: 'success' })
   }
-  if (row.status === 'failed') {
-    logs.unshift({ time: row.finishTime, title: '退款失败', desc: row.remark, type: 'danger' })
-    logs.unshift({ time: row.applyTime, title: '审核通过，发起退款', operator: '系统管理员', type: 'success' })
+  if (row.statusKey === 'failed') {
+    logs.push({ time: row.applyTime, title: '审核通过，发起退款', type: 'success' })
+    logs.push({ time: row.finishTime, title: '退款失败', desc: row.refundReason, type: 'danger' })
   }
-  if (row.status === 'rejected') {
-    logs.unshift({ time: row.finishTime, title: '退款被拒绝', desc: row.remark, operator: '系统管理员', type: 'danger' })
-  }
-  operationLogs.value = logs.reverse()
+  operationLogs.value = logs
 }
 
 const handleApprove = (row: any) => {
@@ -421,6 +446,7 @@ const handleApprove = (row: any) => {
     if (drawerVisible.value) {
       drawerVisible.value = false
     }
+    loadData()
   }).catch(() => {})
 }
 
@@ -441,6 +467,10 @@ const confirmReject = () => {
     drawerVisible.value = false
   }
 }
+
+onMounted(() => {
+  loadData()
+})
 </script>
 
 <style lang="scss" scoped>
