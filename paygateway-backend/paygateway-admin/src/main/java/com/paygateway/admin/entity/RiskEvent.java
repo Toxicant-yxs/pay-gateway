@@ -56,4 +56,7 @@ public class RiskEvent {
 
     @TableField("deleted")
     private Integer deleted;
+
+    @TableField(exist = false)
+    private String merchantName;
 }

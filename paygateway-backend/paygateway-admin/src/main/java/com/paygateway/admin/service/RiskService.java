@@ -2,9 +2,11 @@ package com.paygateway.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.paygateway.admin.entity.MerchantInfo;
 import com.paygateway.admin.entity.RiskBlacklist;
 import com.paygateway.admin.entity.RiskEvent;
 import com.paygateway.admin.entity.RiskRule;
+import com.paygateway.admin.mapper.MerchantInfoMapper;
 import com.paygateway.admin.mapper.RiskBlacklistMapper;
 import com.paygateway.admin.mapper.RiskEventMapper;
 import com.paygateway.admin.mapper.RiskRuleMapper;
@@ -17,9 +19,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +29,7 @@ public class RiskService {
     private final RiskRuleMapper riskRuleMapper;
     private final RiskEventMapper riskEventMapper;
     private final RiskBlacklistMapper riskBlacklistMapper;
+    private final MerchantInfoMapper merchantInfoMapper;
 
     public PageResult<RiskRule> listRules(PageQuery pageQuery, String category, Integer status) {
         Page<RiskRule> page = new Page<>(pageQuery.getPage(), pageQuery.getPageSize());
@@ -112,6 +114,7 @@ public class RiskService {
         }
         wrapper.orderByDesc(RiskEvent::getTriggeredAt);
         Page<RiskEvent> result = riskEventMapper.selectPage(page, wrapper);
+        enrichEvents(result.getRecords());
         return PageResult.of(result.getRecords(), result.getTotal(), pageQuery.getPage(), pageQuery.getPageSize());
     }
 
@@ -124,7 +127,34 @@ public class RiskService {
         if (event == null) {
             throw new BusinessException(ResultCode.NOT_FOUND);
         }
+        enrichEvents(Collections.singletonList(event));
         return event;
+    }
+
+    private void enrichEvents(List<RiskEvent> events) {
+        if (events == null || events.isEmpty()) return;
+
+        Set<String> merchantNos = events.stream()
+                .map(RiskEvent::getMerchantNo)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        Map<String, String> merchantNameMap = new HashMap<>();
+        if (!merchantNos.isEmpty()) {
+            List<MerchantInfo> merchants = merchantInfoMapper.selectList(
+                    new LambdaQueryWrapper<MerchantInfo>()
+                            .select(MerchantInfo::getMerchantNo, MerchantInfo::getMerchantName)
+                            .in(MerchantInfo::getMerchantNo, merchantNos)
+            );
+            merchantNameMap = merchants.stream()
+                    .collect(Collectors.toMap(MerchantInfo::getMerchantNo, MerchantInfo::getMerchantName, (a, b) -> a));
+        }
+
+        for (RiskEvent event : events) {
+            if (StringUtils.hasText(event.getMerchantNo())) {
+                event.setMerchantName(merchantNameMap.getOrDefault(event.getMerchantNo(), "-"));
+            }
+        }
     }
 
     public void handleEvent(Long id, String action, String handleNote, Boolean addBlacklist) {
