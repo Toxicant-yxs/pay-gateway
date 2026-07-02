@@ -30,7 +30,9 @@ public class MerchantController {
             @Parameter(description = "页码") @RequestParam(required = false) Integer page,
             @Parameter(description = "每页数量") @RequestParam(required = false) Integer pageSize,
             @Parameter(description = "商户名称") @RequestParam(required = false) String merchantName,
+            @Parameter(description = "商户名称(别名)") @RequestParam(required = false) String name,
             @Parameter(description = "商户编号") @RequestParam(required = false) String merchantNo,
+            @Parameter(description = "商户编号(别名)") @RequestParam(required = false) String merchantId,
             @Parameter(description = "搜索关键词") @RequestParam(required = false) String keyword,
             @Parameter(description = "状态") @RequestParam(required = false) Integer status,
             @Parameter(description = "开始时间") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
@@ -38,7 +40,9 @@ public class MerchantController {
         PageQuery pageQuery = new PageQuery();
         if (page != null) pageQuery.setPage(page);
         if (pageSize != null) pageQuery.setPageSize(pageSize);
-        PageResult<MerchantInfo> result = merchantService.list(pageQuery, merchantName, merchantNo, keyword, status, startTime, endTime);
+        String finalMerchantName = merchantName != null ? merchantName : name;
+        String finalMerchantNo = merchantNo != null ? merchantNo : merchantId;
+        PageResult<MerchantInfo> result = merchantService.list(pageQuery, finalMerchantName, finalMerchantNo, keyword, status, startTime, endTime);
         return Result.success(result);
     }
 

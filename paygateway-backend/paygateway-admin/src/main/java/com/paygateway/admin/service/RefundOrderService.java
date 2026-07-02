@@ -29,7 +29,7 @@ public class RefundOrderService {
     private final ChannelConfigMapper channelConfigMapper;
 
     public PageResult<RefundOrder> list(PageQuery pageQuery, String refundNo, String orderNo, String merchantNo,
-                                         String channelCode, Integer status, LocalDateTime startTime, LocalDateTime endTime) {
+                                         String merchantName, String channelCode, Integer status, LocalDateTime startTime, LocalDateTime endTime) {
         Page<RefundOrder> page = new Page<>(pageQuery.getPage(), pageQuery.getPageSize());
         LambdaQueryWrapper<RefundOrder> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RefundOrder::getDeleted, 0);
@@ -41,6 +41,19 @@ public class RefundOrderService {
         }
         if (StringUtils.hasText(merchantNo)) {
             wrapper.eq(RefundOrder::getMerchantNo, merchantNo);
+        }
+        if (StringUtils.hasText(merchantName)) {
+            List<MerchantInfo> merchants = merchantInfoMapper.selectList(
+                    new LambdaQueryWrapper<MerchantInfo>()
+                            .select(MerchantInfo::getMerchantNo)
+                            .like(MerchantInfo::getMerchantName, merchantName)
+            );
+            if (!merchants.isEmpty()) {
+                wrapper.in(RefundOrder::getMerchantNo,
+                        merchants.stream().map(MerchantInfo::getMerchantNo).collect(Collectors.toList()));
+            } else {
+                wrapper.eq(RefundOrder::getId, -1);
+            }
         }
         if (StringUtils.hasText(channelCode)) {
             wrapper.eq(RefundOrder::getChannelCode, channelCode.toUpperCase());

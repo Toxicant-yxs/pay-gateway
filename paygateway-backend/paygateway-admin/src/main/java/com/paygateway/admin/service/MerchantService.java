@@ -172,12 +172,28 @@ public class MerchantService {
                         .eq(MerchantInfo::getDeleted, 0)
                         .eq(MerchantInfo::getStatus, 0)
         );
+        Long approvedCount = merchantInfoMapper.selectCount(
+                new LambdaQueryWrapper<MerchantInfo>()
+                        .eq(MerchantInfo::getDeleted, 0)
+                        .eq(MerchantInfo::getStatus, 1)
+                        .ge(MerchantInfo::getCreatedAt, LocalDateTime.now().toLocalDate().atStartOfDay())
+        );
+        Long rejectedCount = merchantInfoMapper.selectCount(
+                new LambdaQueryWrapper<MerchantInfo>()
+                        .eq(MerchantInfo::getDeleted, 0)
+                        .eq(MerchantInfo::getStatus, 4)
+                        .ge(MerchantInfo::getCreatedAt, LocalDateTime.now().toLocalDate().atStartOfDay())
+        );
+        stats.put("pending", pendingCount);
         stats.put("pendingCount", pendingCount);
-        stats.put("todayCount", merchantInfoMapper.selectCount(
+        stats.put("approved", approvedCount);
+        stats.put("rejected", rejectedCount);
+        stats.put("todayNew", merchantInfoMapper.selectCount(
                 new LambdaQueryWrapper<MerchantInfo>()
                         .eq(MerchantInfo::getDeleted, 0)
                         .ge(MerchantInfo::getCreatedAt, LocalDateTime.now().toLocalDate().atStartOfDay())
         ));
+        stats.put("todayCount", stats.get("todayNew"));
         return stats;
     }
 

@@ -29,7 +29,8 @@ public class TradeOrderService {
     private final ChannelConfigMapper channelConfigMapper;
 
     public PageResult<TradeOrder> list(PageQuery pageQuery, String orderNo, String merchantNo,
-                                       String channelCode, Integer status,
+                                       String channelCode, String payType, Integer status,
+                                       java.math.BigDecimal minAmount, java.math.BigDecimal maxAmount,
                                        LocalDateTime startTime, LocalDateTime endTime) {
         Page<TradeOrder> page = new Page<>(pageQuery.getPage(), pageQuery.getPageSize());
 
@@ -46,8 +47,17 @@ public class TradeOrderService {
         if (StringUtils.hasText(channelCode)) {
             wrapper.eq(TradeOrder::getChannelCode, channelCode.toUpperCase());
         }
+        if (StringUtils.hasText(payType)) {
+            wrapper.eq(TradeOrder::getPayType, payType.toUpperCase());
+        }
         if (status != null) {
             wrapper.eq(TradeOrder::getStatus, status);
+        }
+        if (minAmount != null) {
+            wrapper.ge(TradeOrder::getAmount, minAmount);
+        }
+        if (maxAmount != null) {
+            wrapper.le(TradeOrder::getAmount, maxAmount);
         }
         if (startTime != null) {
             wrapper.ge(TradeOrder::getCreatedAt, startTime);

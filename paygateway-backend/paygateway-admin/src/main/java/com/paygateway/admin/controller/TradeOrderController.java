@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @RestController
@@ -29,8 +30,14 @@ public class TradeOrderController {
             @Parameter(description = "每页数量") @RequestParam(required = false) Integer pageSize,
             @Parameter(description = "订单号") @RequestParam(required = false) String orderNo,
             @Parameter(description = "商户号") @RequestParam(required = false) String merchantNo,
+            @Parameter(description = "商户号(别名)") @RequestParam(required = false) String merchantId,
             @Parameter(description = "通道编码") @RequestParam(required = false) String channelCode,
+            @Parameter(description = "通道编码(别名)") @RequestParam(required = false) String channel,
+            @Parameter(description = "支付方式") @RequestParam(required = false) String payType,
+            @Parameter(description = "支付方式(别名)") @RequestParam(required = false) String payMethod,
             @Parameter(description = "订单状态") @RequestParam(required = false) Integer status,
+            @Parameter(description = "最小金额") @RequestParam(required = false) BigDecimal minAmount,
+            @Parameter(description = "最大金额") @RequestParam(required = false) BigDecimal maxAmount,
             @Parameter(description = "开始时间") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
             @Parameter(description = "结束时间") @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime endTime) {
         PageQuery pageQuery = new PageQuery();
@@ -40,7 +47,10 @@ public class TradeOrderController {
         if (pageSize != null) {
             pageQuery.setPageSize(pageSize);
         }
-        PageResult<TradeOrder> result = tradeOrderService.list(pageQuery, orderNo, merchantNo, channelCode, status, startTime, endTime);
+        String finalMerchantNo = merchantNo != null ? merchantNo : merchantId;
+        String finalChannelCode = channelCode != null ? channelCode : channel;
+        String finalPayType = payType != null ? payType : payMethod;
+        PageResult<TradeOrder> result = tradeOrderService.list(pageQuery, orderNo, finalMerchantNo, finalChannelCode, finalPayType, status, minAmount, maxAmount, startTime, endTime);
         return Result.success(result);
     }
 

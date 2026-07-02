@@ -29,6 +29,8 @@ public class RefundOrderController {
             @RequestParam(required = false) String refundNo,
             @RequestParam(required = false) String orderNo,
             @RequestParam(required = false) String merchantNo,
+            @RequestParam(required = false) String merchantId,
+            @RequestParam(required = false) String merchantName,
             @RequestParam(required = false) String channelCode,
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime startTime,
@@ -36,7 +38,8 @@ public class RefundOrderController {
         PageQuery pageQuery = new PageQuery();
         if (page != null) pageQuery.setPage(page);
         if (pageSize != null) pageQuery.setPageSize(pageSize);
-        return Result.success(refundOrderService.list(pageQuery, refundNo, orderNo, merchantNo, channelCode, status, startTime, endTime));
+        String finalMerchantNo = merchantNo != null ? merchantNo : merchantId;
+        return Result.success(refundOrderService.list(pageQuery, refundNo, orderNo, finalMerchantNo, merchantName, channelCode, status, startTime, endTime));
     }
 
     @GetMapping("/{id}")
