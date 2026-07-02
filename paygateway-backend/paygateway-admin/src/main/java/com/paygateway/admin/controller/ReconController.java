@@ -8,11 +8,13 @@ import com.paygateway.common.result.PageResult;
 import com.paygateway.common.result.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Map;
 
@@ -78,6 +80,12 @@ public class ReconController {
         return Result.success(reconService.getStats());
     }
 
+    @GetMapping("/tasks/{id}/download")
+    @Operation(summary = "下载对账账单")
+    public void downloadBill(@PathVariable Long id, HttpServletResponse response) throws IOException {
+        reconService.downloadBill(id, response);
+    }
+
     @GetMapping("/reports")
     @Operation(summary = "查询对账报表")
     public Result<PageResult<Map<String, Object>>> getReports(
@@ -90,6 +98,17 @@ public class ReconController {
         if (page != null) pageQuery.setPage(page);
         if (pageSize != null) pageQuery.setPageSize(pageSize);
         return Result.success(reconService.getReports(pageQuery, startDate, endDate, channelCode));
+    }
+
+    @GetMapping("/reports/export")
+    @Operation(summary = "导出对账报表")
+    public void exportReport(
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
+            @RequestParam(required = false) String channelCode,
+            @RequestParam(required = false, defaultValue = "excel") String format,
+            HttpServletResponse response) throws IOException {
+        reconService.exportReport(startDate, endDate, channelCode, format, response);
     }
 
     @Data

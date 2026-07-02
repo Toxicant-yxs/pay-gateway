@@ -10,12 +10,18 @@ import com.paygateway.common.dto.PageQuery;
 import com.paygateway.common.exception.BusinessException;
 import com.paygateway.common.result.PageResult;
 import com.paygateway.common.result.ResultCode;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -161,5 +167,71 @@ public class ReconService {
                 }).toList(),
                 (long) tasks.size(), pageQuery.getPage(), pageQuery.getPageSize()
         );
+    }
+
+    public void downloadBill(Long taskId, HttpServletResponse response) throws IOException {
+        ReconTask task = getTaskById(taskId);
+        List<ReconDetail> details = reconDetailMapper.selectList(
+                new LambdaQueryWrapper<ReconDetail>()
+                        .eq(ReconDetail::getDeleted, 0)
+                        .eq(ReconDetail::getTaskId, taskId)
+        );
+
+        response.setContentType("text/csv;charset=UTF-8");
+        String fileName = URLEncoder.encode("reconciliation_bill_" + taskId + ".csv", StandardCharsets.UTF_8);
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
+
+        PrintWriter writer = response.getWriter();
+        writer.println("订单号,我方金额,通道金额,我方状态,通道状态,差异类型,处理状态,处理备注,创建时间");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        for (ReconDetail detail : details) {
+            writer.printf("%s,%s,%s,%d,%d,%s,%d,%s,%s%n",
+                    detail.getOrderNo() != null ? detail.getOrderNo() : "",
+                    detail.getOurAmount() != null ? detail.getOurAmount().toString() : "0",
+                    detail.getChannelAmount() != null ? detail.getChannelAmount().toString() : "0",
+                    detail.getOurStatus() != null ? detail.getOurStatus() : 0,
+                    detail.getChannelStatus() != null ? detail.getChannelStatus() : 0,
+                    detail.getDiffType() != null ? detail.getDiffType() : "",
+                    detail.getStatus() != null ? detail.getStatus() : 0,
+                    detail.getHandleNote() != null ? detail.getHandleNote() : "",
+                    detail.getCreatedAt() != null ? detail.getCreatedAt().format(fmt) : ""
+            );
+        }
+        writer.flush();
+        writer.close();
+    }
+
+    public void exportReport(LocalDate startDate, LocalDate endDate, String channelCode, String format, HttpServletResponse response) throws IOException {
+        List<ReconTask> tasks = reconTaskMapper.selectList(
+                new LambdaQueryWrapper<ReconTask>()
+                        .eq(ReconTask::getDeleted, 0)
+                        .eq(ReconTask::getStatus, 2)
+                        .ge(startDate != null, ReconTask::getReconDate, startDate)
+                        .le(endDate != null, ReconTask::getReconDate, endDate)
+                        .eq(StringUtils.hasText(channelCode), ReconTask::getChannelCode, channelCode)
+                        .orderByDesc(ReconTask::getReconDate)
+        );
+
+        response.setContentType("text/csv;charset=UTF-8");
+        String fileName = URLEncoder.encode("reconciliation_report.csv", StandardCharsets.UTF_8);
+        response.setHeader("Content-Disposition", "attachment; filename=" + fileName);
+
+        PrintWriter writer = response.getWriter();
+        writer.println("对账日期,通道编码,交易总数,交易总金额,匹配数量,差异数量,成功率");
+        for (ReconTask task : tasks) {
+            double successRate = task.getTotalCount() != null && task.getTotalCount() > 0 ?
+                    (double) task.getMatchCount() / task.getTotalCount() * 100 : 0;
+            writer.printf("%s,%s,%d,%s,%d,%d,%.2f%%%n",
+                    task.getReconDate() != null ? task.getReconDate().toString() : "",
+                    task.getChannelCode() != null ? task.getChannelCode() : "",
+                    task.getTotalCount() != null ? task.getTotalCount() : 0,
+                    task.getTotalAmount() != null ? task.getTotalAmount().toString() : "0",
+                    task.getMatchCount() != null ? task.getMatchCount() : 0,
+                    task.getDiffCount() != null ? task.getDiffCount() : 0,
+                    successRate
+            );
+        }
+        writer.flush();
+        writer.close();
     }
 }

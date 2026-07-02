@@ -179,6 +179,19 @@ CREATE TABLE IF NOT EXISTS risk_event (
 );
 CREATE INDEX IF NOT EXISTS idx_risk_status ON risk_event(status);
 
+CREATE TABLE IF NOT EXISTS risk_blacklist (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    type VARCHAR(32) NOT NULL,
+    value VARCHAR(256) NOT NULL,
+    reason VARCHAR(512),
+    status TINYINT NOT NULL DEFAULT 1,
+    expire_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_blacklist_type ON risk_blacklist(type, status);
+
 CREATE TABLE IF NOT EXISTS recon_task (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     task_no VARCHAR(32) NOT NULL UNIQUE,

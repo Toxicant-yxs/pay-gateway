@@ -2,15 +2,16 @@ package com.paygateway.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.paygateway.admin.entity.RiskBlacklist;
 import com.paygateway.admin.entity.RiskEvent;
 import com.paygateway.admin.entity.RiskRule;
+import com.paygateway.admin.mapper.RiskBlacklistMapper;
 import com.paygateway.admin.mapper.RiskEventMapper;
 import com.paygateway.admin.mapper.RiskRuleMapper;
 import com.paygateway.common.dto.PageQuery;
 import com.paygateway.common.exception.BusinessException;
 import com.paygateway.common.result.PageResult;
 import com.paygateway.common.result.ResultCode;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -26,6 +27,7 @@ public class RiskService {
 
     private final RiskRuleMapper riskRuleMapper;
     private final RiskEventMapper riskEventMapper;
+    private final RiskBlacklistMapper riskBlacklistMapper;
 
     public PageResult<RiskRule> listRules(PageQuery pageQuery, String category, Integer status) {
         Page<RiskRule> page = new Page<>(pageQuery.getPage(), pageQuery.getPageSize());
@@ -125,13 +127,31 @@ public class RiskService {
         return event;
     }
 
-    public void handleEvent(Long id, String handleNote) {
+    public void handleEvent(Long id, String action, String handleNote, Boolean addBlacklist) {
         RiskEvent event = getEventById(id);
-        event.setStatus(1);
+        if ("PROCESSED".equals(action)) {
+            event.setStatus(1);
+        } else if ("IGNORED".equals(action)) {
+            event.setStatus(2);
+        } else {
+            event.setStatus(1);
+        }
         event.setHandleNote(handleNote);
         event.setHandledAt(LocalDateTime.now());
         event.setUpdatedAt(LocalDateTime.now());
         riskEventMapper.updateById(event);
+
+        if (Boolean.TRUE.equals(addBlacklist) && StringUtils.hasText(event.getMerchantNo())) {
+            RiskBlacklist blacklist = new RiskBlacklist();
+            blacklist.setType("MERCHANT");
+            blacklist.setValue(event.getMerchantNo());
+            blacklist.setReason("风险事件自动加入黑名单: " + (StringUtils.hasText(handleNote) ? handleNote : event.getTriggerRule()));
+            blacklist.setStatus(1);
+            blacklist.setCreatedAt(LocalDateTime.now());
+            blacklist.setUpdatedAt(LocalDateTime.now());
+            blacklist.setDeleted(0);
+            riskBlacklistMapper.insert(blacklist);
+        }
     }
 
     public Map<String, Object> getEventStats() {
@@ -147,6 +167,18 @@ public class RiskService {
                         .eq(RiskEvent::getRiskLevel, "HIGH")
                         .eq(RiskEvent::getStatus, 0)
         );
+        Long mediumCount = riskEventMapper.selectCount(
+                new LambdaQueryWrapper<RiskEvent>()
+                        .eq(RiskEvent::getDeleted, 0)
+                        .eq(RiskEvent::getRiskLevel, "MEDIUM")
+                        .eq(RiskEvent::getStatus, 0)
+        );
+        Long lowCount = riskEventMapper.selectCount(
+                new LambdaQueryWrapper<RiskEvent>()
+                        .eq(RiskEvent::getDeleted, 0)
+                        .eq(RiskEvent::getRiskLevel, "LOW")
+                        .eq(RiskEvent::getStatus, 0)
+        );
         Long todayCount = riskEventMapper.selectCount(
                 new LambdaQueryWrapper<RiskEvent>()
                         .eq(RiskEvent::getDeleted, 0)
@@ -155,10 +187,48 @@ public class RiskService {
         Long totalCount = riskEventMapper.selectCount(
                 new LambdaQueryWrapper<RiskEvent>().eq(RiskEvent::getDeleted, 0)
         );
+        stats.put("highCount", highCount);
+        stats.put("mediumCount", mediumCount);
+        stats.put("lowCount", lowCount);
         stats.put("pendingCount", pendingCount);
         stats.put("highRiskCount", highCount);
         stats.put("todayCount", todayCount);
         stats.put("totalCount", totalCount);
         return stats;
+    }
+
+    public PageResult<RiskBlacklist> listBlacklist(PageQuery pageQuery, String type) {
+        Page<RiskBlacklist> page = new Page<>(pageQuery.getPage(), pageQuery.getPageSize());
+        LambdaQueryWrapper<RiskBlacklist> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RiskBlacklist::getDeleted, 0);
+        if (StringUtils.hasText(type)) {
+            wrapper.eq(RiskBlacklist::getType, type);
+        }
+        wrapper.orderByDesc(RiskBlacklist::getCreatedAt);
+        Page<RiskBlacklist> result = riskBlacklistMapper.selectPage(page, wrapper);
+        return PageResult.of(result.getRecords(), result.getTotal(), pageQuery.getPage(), pageQuery.getPageSize());
+    }
+
+    public RiskBlacklist addBlacklist(RiskBlacklist blacklist) {
+        blacklist.setCreatedAt(LocalDateTime.now());
+        blacklist.setUpdatedAt(LocalDateTime.now());
+        blacklist.setDeleted(0);
+        if (blacklist.getStatus() == null) blacklist.setStatus(1);
+        riskBlacklistMapper.insert(blacklist);
+        return blacklist;
+    }
+
+    public void removeBlacklist(Long id) {
+        RiskBlacklist blacklist = riskBlacklistMapper.selectOne(
+                new LambdaQueryWrapper<RiskBlacklist>()
+                        .eq(RiskBlacklist::getId, id)
+                        .eq(RiskBlacklist::getDeleted, 0)
+        );
+        if (blacklist == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND);
+        }
+        blacklist.setDeleted(1);
+        blacklist.setUpdatedAt(LocalDateTime.now());
+        riskBlacklistMapper.updateById(blacklist);
     }
 }

@@ -1,5 +1,6 @@
 package com.paygateway.admin.controller;
 
+import com.paygateway.admin.entity.RiskBlacklist;
 import com.paygateway.admin.entity.RiskEvent;
 import com.paygateway.admin.entity.RiskRule;
 import com.paygateway.admin.service.RiskService;
@@ -82,7 +83,7 @@ public class RiskController {
     @PostMapping("/events/{id}/handle")
     @Operation(summary = "处理风险事件")
     public Result<Void> handleEvent(@PathVariable Long id, @RequestBody HandleRequest request) {
-        riskService.handleEvent(id, request.getHandleNote());
+        riskService.handleEvent(id, request.getAction(), request.getNote(), request.getAddBlacklist());
         return Result.success();
     }
 
@@ -92,6 +93,31 @@ public class RiskController {
         return Result.success(riskService.getEventStats());
     }
 
+    @GetMapping("/blacklist")
+    @Operation(summary = "查询黑名单列表")
+    public Result<PageResult<RiskBlacklist>> listBlacklist(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize,
+            @RequestParam(required = false) String type) {
+        PageQuery pageQuery = new PageQuery();
+        if (page != null) pageQuery.setPage(page);
+        if (pageSize != null) pageQuery.setPageSize(pageSize);
+        return Result.success(riskService.listBlacklist(pageQuery, type));
+    }
+
+    @PostMapping("/blacklist")
+    @Operation(summary = "添加黑名单")
+    public Result<RiskBlacklist> addBlacklist(@RequestBody RiskBlacklist blacklist) {
+        return Result.success(riskService.addBlacklist(blacklist));
+    }
+
+    @DeleteMapping("/blacklist/{id}")
+    @Operation(summary = "移除黑名单")
+    public Result<Void> removeBlacklist(@PathVariable Long id) {
+        riskService.removeBlacklist(id);
+        return Result.success();
+    }
+
     @Data
     public static class StatusRequest {
         private Integer status;
@@ -99,6 +125,8 @@ public class RiskController {
 
     @Data
     public static class HandleRequest {
-        private String handleNote;
+        private String action;
+        private String note;
+        private Boolean addBlacklist;
     }
 }
