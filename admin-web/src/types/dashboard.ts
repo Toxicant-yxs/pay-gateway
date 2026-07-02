@@ -18,6 +18,7 @@ export interface TrendData {
 }
 
 export interface ChannelStatusItem {
+  channelId?: number | string
   channelCode: string
   channelName: string
   payTypes: string | string[]
@@ -69,5 +70,6 @@ export interface RecentTrade {
 export interface DistributionItem {
   name: string
   value: number
+  amount: number
   percentage?: number
 }

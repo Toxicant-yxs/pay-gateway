@@ -10,4 +10,8 @@ public class AmountDistribution {
     private String name;
 
     private BigDecimal value;
+
+    private BigDecimal amount;
+
+    private BigDecimal percentage;
 }

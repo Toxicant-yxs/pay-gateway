@@ -60,4 +60,10 @@ public class RefundOrder {
 
     @TableField("deleted")
     private Integer deleted;
+
+    @TableField(exist = false)
+    private String merchantName;
+
+    @TableField(exist = false)
+    private String channelName;
 }

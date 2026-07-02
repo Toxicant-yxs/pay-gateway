@@ -129,10 +129,10 @@
           </template>
         </el-table-column>
         <el-table-column prop="merchantName" label="商户名称" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="channelCode" label="支付通道" width="110">
+        <el-table-column prop="channelName" label="支付通道" width="110">
           <template #default="{ row }">
             <el-tag size="small" effect="plain" :color="getChannelColor(row.channelCode)" style="color: #fff; border: none">
-              {{ getChannelName(row.channelCode) }}
+              {{ row.channelName || getChannelName(row.channelCode) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -353,12 +353,12 @@ function formatDate(dt: string | undefined): string {
 function mapRow(r: RefundOrder) {
   return {
     ...r,
-    channel: getChannelName(r.channelCode || ''),
+    channel: r.channelName || getChannelName(r.channelCode || ''),
     channelDisplay: r.channelCode,
-    merchantName: r.merchantNo || '-',
+    merchantName: r.merchantName || r.merchantNo || '-',
     statusKey: getStatusKey(r.status ?? 0),
-    applyTime: formatDate(r.createdAt),
-    finishTime: r.refundedAt ? formatDate(r.refundedAt) : null
+    applyTime: r.createdAt || '-',
+    finishTime: r.refundedAt || null
   }
 }
 

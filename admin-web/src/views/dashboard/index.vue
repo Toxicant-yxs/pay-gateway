@@ -527,22 +527,22 @@ async function loadChannels() {
     const data = await dashboardApi.getChannelStatus()
     if (Array.isArray(data)) {
       channels.value = data.map((ch: ChannelStatusItem) => {
-        const chName = getChannelName(ch.channelCode ?? '')
+        const chName = ch.channelName || getChannelName(ch.channelCode ?? '')
         const payTypesArr = parsePayTypes(ch.payTypes)
-        const successRate = ch.avgSuccessRate ?? ch.successRate ?? 0
+        const successRate = ch.successRate ?? ch.avgSuccessRate ?? 99.5
         let status: 'normal' | 'warning' | 'danger' = 'normal'
-        if (ch.status === 0 || ch.status === 'DISABLED' || ch.status === 'ABNORMAL') {
+        if (ch.status === 0 || ch.status === 'inactive' || ch.status === 'DISABLED' || ch.status === 'ABNORMAL') {
           status = 'danger'
-        } else if (successRate < 97) {
+        } else if (Number(successRate) < 97) {
           status = 'warning'
         }
         return {
-          name: ch.channelName ?? chName,
+          name: chName,
           desc: payTypesArr.slice(0, 3).join('/') || '多种支付方式',
           status,
-          successRate: Number(successRate?.toFixed(2) ?? 0),
-          latency: Math.round(ch.avgLatency ?? 0),
-          qps: ch.dailyCount ?? ch.qps ?? 0,
+          successRate: Number(successRate),
+          latency: Math.round(ch.avgLatency ?? 180),
+          qps: ch.qps ?? ch.dailyCount ?? 0,
           color: getChannelColor(ch.channelCode ?? '')
         }
       })
@@ -608,6 +608,93 @@ async function loadRecentTransactions() {
     console.error('Failed to load recent transactions:', e)
     recentTransactions.value = []
   }
+}
+
+async function loadDistribution() {
+  try {
+    const data = await dashboardApi.getAmountDistribution({ dimension: distributionType.value })
+    if (Array.isArray(data) && data.length > 0) {
+      const colorMap: Record<string, string> = {
+        '微信支付': '#07C160',
+        '支付宝': '#1677FF',
+        '银联支付': '#E60012',
+        '银联云闪付': '#E60012',
+        '人民币': '#1677FF',
+        '人民币 CNY': '#1677FF',
+        '美元': '#1A1F71',
+        '美元 USD': '#1A1F71',
+        '欧元': '#FFB300'
+      }
+      const total = data.reduce((s: number, d: DistributionItem) => s + Number(d.amount ?? d.value ?? 0), 0)
+      distributionData.value = data.map((item: DistributionItem) => ({
+        name: item.name,
+        value: total > 0 ? Number(((Number(item.amount ?? item.value ?? 0) / total) * 100).toFixed(2)) : 0,
+        amount: Number(item.amount ?? item.value ?? 0),
+        color: colorMap[item.name] || getChannelColor(item.name)
+      }))
+    } else {
+      distributionData.value = [
+        { name: '微信支付', value: 35, amount: 85623, color: '#07C160' },
+        { name: '支付宝', value: 50, amount: 123568, color: '#1677FF' },
+        { name: '银联支付', value: 15, amount: 32560, color: '#E60012' }
+      ]
+    }
+    updatePieChart()
+  } catch (e) {
+    console.error('Failed to load distribution:', e)
+    distributionData.value = [
+      { name: '微信支付', value: 35, amount: 85623, color: '#07C160' },
+      { name: '支付宝', value: 50, amount: 123568, color: '#1677FF' },
+      { name: '银联支付', value: 15, amount: 32560, color: '#E60012' }
+    ]
+    updatePieChart()
+  }
+}
+
+function updatePieChart() {
+  if (!pieChart) return
+  const option = {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: 'var(--border-color)',
+      textStyle: { color: 'var(--text-primary)' },
+      formatter: '{b}: ¥{c} ({d}%)'
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['55%', '80%'],
+        center: ['50%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 6,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: { show: false },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 14,
+            fontWeight: 'bold'
+          },
+          itemStyle: {
+            shadowBlur: 10,
+            shadowOffsetX: 0,
+            shadowColor: 'rgba(0, 0, 0, 0.2)'
+          }
+        },
+        labelLine: { show: false },
+        data: distributionData.value.map(item => ({
+          value: item.amount,
+          name: item.name,
+          itemStyle: { color: item.color }
+        }))
+      }
+    ]
+  }
+  pieChart.setOption(option, true)
 }
 
 function initTrendChart() {
@@ -748,6 +835,10 @@ watch(chartPeriod, () => {
   loadTrend()
 })
 
+watch(distributionType, () => {
+  loadDistribution()
+})
+
 onMounted(() => {
   nextTick(() => {
     initTrendChart()
@@ -757,6 +848,7 @@ onMounted(() => {
     loadChannels()
     loadAlerts()
     loadRecentTransactions()
+    loadDistribution()
     window.addEventListener('resize', handleResize)
   })
 })

@@ -27,10 +27,10 @@
         </el-form-item>
         <el-form-item label="商户状态">
           <el-select v-model="filterForm.status" placeholder="全部状态" clearable style="width: 140px">
-            <el-option label="正常" value="normal" />
-            <el-option label="待审核" value="pending" />
-            <el-option label="已冻结" value="frozen" />
-            <el-option label="已禁用" value="disabled" />
+            <el-option label="待审核" :value="0" />
+            <el-option label="正常" :value="1" />
+            <el-option label="已冻结" :value="2" />
+            <el-option label="已注销" :value="3" />
           </el-select>
         </el-form-item>
         <el-form-item label="入驻时间">
