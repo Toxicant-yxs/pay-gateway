@@ -15,6 +15,54 @@ CREATE TABLE IF NOT EXISTS sys_user (
     deleted TINYINT NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_code VARCHAR(32) NOT NULL UNIQUE,
+    role_name VARCHAR(64) NOT NULL,
+    description VARCHAR(256),
+    data_scope TINYINT NOT NULL DEFAULT 1,
+    status TINYINT NOT NULL DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS sys_permission (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    parent_id BIGINT DEFAULT 0,
+    permission_code VARCHAR(64) NOT NULL UNIQUE,
+    permission_name VARCHAR(64) NOT NULL,
+    permission_type TINYINT NOT NULL DEFAULT 1,
+    path VARCHAR(256),
+    component VARCHAR(256),
+    icon VARCHAR(64),
+    sort_order INT DEFAULT 0,
+    visible TINYINT NOT NULL DEFAULT 1,
+    status TINYINT NOT NULL DEFAULT 1,
+    remark VARCHAR(256),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_permission_parent ON sys_permission(parent_id);
+
+CREATE TABLE IF NOT EXISTS sys_user_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_role (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS sys_role_permission (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_id BIGINT NOT NULL,
+    permission_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_role_permission (role_id, permission_id)
+);
+
 CREATE TABLE IF NOT EXISTS merchant_info (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     merchant_no VARCHAR(32) NOT NULL UNIQUE,

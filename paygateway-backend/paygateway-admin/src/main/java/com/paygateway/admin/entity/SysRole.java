@@ -10,41 +10,29 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@TableName("sys_user")
-public class SysUser {
+@TableName("sys_role")
+public class SysRole {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    @TableField("username")
-    private String username;
-
-    @TableField("password")
-    private String password;
-
-    @TableField("real_name")
-    private String realName;
-
-    @TableField("avatar")
-    private String avatar;
-
-    @TableField("email")
-    private String email;
-
-    @TableField("phone")
-    private String phone;
-
     @TableField("role_code")
     private String roleCode;
+
+    @TableField("role_name")
+    private String roleName;
+
+    @TableField("description")
+    private String description;
+
+    @TableField("data_scope")
+    private Integer dataScope;
 
     @TableField("status")
     private Integer status;
 
-    @TableField("last_login_time")
-    private LocalDateTime lastLoginTime;
-
-    @TableField("last_login_ip")
-    private String lastLoginIp;
+    @TableField("sort_order")
+    private Integer sortOrder;
 
     @TableField("created_at")
     private LocalDateTime createdAt;
@@ -56,9 +44,5 @@ public class SysUser {
     private Integer deleted;
 
     @TableField(exist = false)
-    private List<Long> roleIds;
-
-    @TableField(exist = false)
-    private String roleName;
+    private List<Long> permissionIds;
 }
-

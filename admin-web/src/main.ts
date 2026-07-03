@@ -6,6 +6,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { createPinia } from 'pinia'
 import router from './router'
 import App from './App.vue'
+import { setupDirectives } from './directives'
 import './styles/index.scss'
 
 const app = createApp(App)
@@ -18,5 +19,6 @@ const pinia = createPinia()
 app.use(ElementPlus, { locale: zhCn })
 app.use(pinia)
 app.use(router)
+setupDirectives(app)
 
 app.mount('#app')

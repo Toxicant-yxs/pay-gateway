@@ -14,9 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 
 @Slf4j
 @Component
@@ -25,6 +23,10 @@ import java.util.Random;
 public class DataInitializer implements CommandLineRunner {
 
     private final SysUserMapper sysUserMapper;
+    private final SysRoleMapper sysRoleMapper;
+    private final SysPermissionMapper sysPermissionMapper;
+    private final SysUserRoleMapper sysUserRoleMapper;
+    private final SysRolePermissionMapper sysRolePermissionMapper;
     private final MerchantInfoMapper merchantInfoMapper;
     private final ChannelConfigMapper channelConfigMapper;
     private final ChannelRouteMapper channelRouteMapper;
@@ -39,6 +41,8 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        initPermissions();
+        initRoles();
         initAdminUser();
         initChannels();
         initChannelRoutes();
@@ -479,5 +483,235 @@ public class DataInitializer implements CommandLineRunner {
         c.setConfigGroup(group);
         c.setDescription(desc);
         return c;
+    }
+
+    private void initPermissions() {
+        Long count = sysPermissionMapper.selectCount(null);
+        if (count > 0) {
+            log.info("Permissions already exist, skip");
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        Map<String, Long> permIdMap = new HashMap<>();
+
+        // ========== 一级菜单 ==========
+        permIdMap.put("dashboard", insertPermission(0L, "dashboard", "仪表盘", 1, "/dashboard", "dashboard/index", "Odometer", 1, now));
+        permIdMap.put("merchant", insertPermission(0L, "merchant", "商户管理", 1, "/merchant", null, "Shop", 2, now));
+        permIdMap.put("channel", insertPermission(0L, "channel", "通道管理", 1, "/channel", null, "Connection", 3, now));
+        permIdMap.put("trade", insertPermission(0L, "trade", "交易管理", 1, "/transaction", null, "Money", 4, now));
+        permIdMap.put("risk", insertPermission(0L, "risk", "风控管理", 1, "/risk", null, "Warning", 5, now));
+        permIdMap.put("recon", insertPermission(0L, "recon", "对账管理", 1, "/reconciliation", null, "Files", 6, now));
+        permIdMap.put("system", insertPermission(0L, "system", "系统管理", 1, "/system", null, "Setting", 7, now));
+
+        // ========== 仪表盘权限点 ==========
+        insertPermission(permIdMap.get("dashboard"), "dashboard:view", "查看仪表盘", 3, null, null, null, 1, now);
+
+        // ========== 商户管理 ==========
+        Long merchantMenu = permIdMap.get("merchant");
+        Long merchantListMenu = insertPermission(merchantMenu, "merchant:list", "商户列表", 2, "/merchant/list", "merchant/list", "List", 1, now);
+        Long merchantAuditMenu = insertPermission(merchantMenu, "merchant:audit", "商户审核", 2, "/merchant/audit", "merchant/audit", "CircleCheck", 2, now);
+        insertPermission(merchantListMenu, "merchant:list:view", "查看商户列表", 3, null, null, null, 1, now);
+        insertPermission(merchantListMenu, "merchant:add", "新增商户", 3, null, null, null, 2, now);
+        insertPermission(merchantListMenu, "merchant:edit", "编辑商户", 3, null, null, null, 3, now);
+        insertPermission(merchantListMenu, "merchant:remove", "删除商户", 3, null, null, null, 4, now);
+        insertPermission(merchantAuditMenu, "merchant:audit:view", "查看审核列表", 3, null, null, null, 1, now);
+        insertPermission(merchantAuditMenu, "merchant:audit:approve", "审核通过", 3, null, null, null, 2, now);
+        insertPermission(merchantAuditMenu, "merchant:audit:reject", "审核拒绝", 3, null, null, null, 3, now);
+
+        // ========== 通道管理 ==========
+        Long channelMenu = permIdMap.get("channel");
+        Long channelListMenu = insertPermission(channelMenu, "channel:list", "通道配置", 2, "/channel/list", "channel/list", "Setting", 1, now);
+        Long channelRouteMenu = insertPermission(channelMenu, "channel:route", "通道路由", 2, "/channel/route", "channel/route", "Guide", 2, now);
+        insertPermission(channelListMenu, "channel:list:view", "查看通道列表", 3, null, null, null, 1, now);
+        insertPermission(channelListMenu, "channel:add", "新增通道", 3, null, null, null, 2, now);
+        insertPermission(channelListMenu, "channel:edit", "编辑通道", 3, null, null, null, 3, now);
+        insertPermission(channelListMenu, "channel:remove", "删除通道", 3, null, null, null, 4, now);
+        insertPermission(channelRouteMenu, "channel:route:view", "查看路由", 3, null, null, null, 1, now);
+        insertPermission(channelRouteMenu, "channel:route:add", "新增路由", 3, null, null, null, 2, now);
+        insertPermission(channelRouteMenu, "channel:route:edit", "编辑路由", 3, null, null, null, 3, now);
+        insertPermission(channelRouteMenu, "channel:route:remove", "删除路由", 3, null, null, null, 4, now);
+
+        // ========== 交易管理 ==========
+        Long tradeMenu = permIdMap.get("trade");
+        Long tradeOrderMenu = insertPermission(tradeMenu, "trade:order", "交易订单", 2, "/transaction/list", "transaction/list", "Document", 1, now);
+        Long tradeRefundMenu = insertPermission(tradeMenu, "trade:refund", "退款订单", 2, "/transaction/refund", "transaction/refund", "RefreshLeft", 2, now);
+        insertPermission(tradeOrderMenu, "trade:order:view", "查看订单", 3, null, null, null, 1, now);
+        insertPermission(tradeOrderMenu, "trade:order:query", "查询订单", 3, null, null, null, 2, now);
+        insertPermission(tradeOrderMenu, "trade:order:export", "导出订单", 3, null, null, null, 3, now);
+        insertPermission(tradeRefundMenu, "trade:refund:view", "查看退款", 3, null, null, null, 1, now);
+        insertPermission(tradeRefundMenu, "trade:refund:add", "申请退款", 3, null, null, null, 2, now);
+        insertPermission(tradeRefundMenu, "trade:refund:audit", "审核退款", 3, null, null, null, 3, now);
+
+        // ========== 风控管理 ==========
+        Long riskMenu = permIdMap.get("risk");
+        Long riskRulesMenu = insertPermission(riskMenu, "risk:rules", "风控规则", 2, "/risk/rules", "risk/rules", "DocumentCopy", 1, now);
+        Long riskEventsMenu = insertPermission(riskMenu, "risk:events", "风控事件", 2, "/risk/events", "risk/events", "Bell", 2, now);
+        insertPermission(riskRulesMenu, "risk:rules:view", "查看规则", 3, null, null, null, 1, now);
+        insertPermission(riskRulesMenu, "risk:rules:add", "新增规则", 3, null, null, null, 2, now);
+        insertPermission(riskRulesMenu, "risk:rules:edit", "编辑规则", 3, null, null, null, 3, now);
+        insertPermission(riskRulesMenu, "risk:rules:remove", "删除规则", 3, null, null, null, 4, now);
+        insertPermission(riskEventsMenu, "risk:events:view", "查看事件", 3, null, null, null, 1, now);
+        insertPermission(riskEventsMenu, "risk:events:handle", "处理事件", 3, null, null, null, 2, now);
+
+        // ========== 对账管理 ==========
+        Long reconMenu = permIdMap.get("recon");
+        Long reconTasksMenu = insertPermission(reconMenu, "recon:tasks", "对账任务", 2, "/reconciliation/center", "reconciliation/center", "Operation", 1, now);
+        Long reconReportsMenu = insertPermission(reconMenu, "recon:reports", "对账报表", 2, "/reconciliation/report", "reconciliation/report", "DataAnalysis", 2, now);
+        insertPermission(reconTasksMenu, "recon:tasks:view", "查看任务", 3, null, null, null, 1, now);
+        insertPermission(reconTasksMenu, "recon:tasks:create", "创建任务", 3, null, null, null, 2, now);
+        insertPermission(reconTasksMenu, "recon:tasks:handle", "处理差异", 3, null, null, null, 3, now);
+        insertPermission(reconReportsMenu, "recon:reports:view", "查看报表", 3, null, null, null, 1, now);
+
+        // ========== 系统管理 ==========
+        Long systemMenu = permIdMap.get("system");
+        Long sysUserMenu = insertPermission(systemMenu, "system:user", "用户管理", 2, "/system/users", "system/users", "User", 1, now);
+        Long sysRoleMenu = insertPermission(systemMenu, "system:role", "角色管理", 2, "/system/roles", "system/roles", "UserFilled", 2, now);
+        Long sysPermMenu = insertPermission(systemMenu, "system:permission", "权限管理", 2, "/system/permissions", "system/permissions", "Key", 3, now);
+        Long sysConfigMenu = insertPermission(systemMenu, "system:config", "系统配置", 2, "/system/settings", "system/settings", "Tools", 4, now);
+        // 用户管理权限点
+        insertPermission(sysUserMenu, "system:user:list", "用户列表", 3, null, null, null, 1, now);
+        insertPermission(sysUserMenu, "system:user:query", "用户查询", 3, null, null, null, 2, now);
+        insertPermission(sysUserMenu, "system:user:add", "新增用户", 3, null, null, null, 3, now);
+        insertPermission(sysUserMenu, "system:user:edit", "编辑用户", 3, null, null, null, 4, now);
+        insertPermission(sysUserMenu, "system:user:remove", "删除用户", 3, null, null, null, 5, now);
+        insertPermission(sysUserMenu, "system:user:resetPwd", "重置密码", 3, null, null, null, 6, now);
+        // 角色管理权限点
+        insertPermission(sysRoleMenu, "system:role:list", "角色列表", 3, null, null, null, 1, now);
+        insertPermission(sysRoleMenu, "system:role:query", "角色查询", 3, null, null, null, 2, now);
+        insertPermission(sysRoleMenu, "system:role:add", "新增角色", 3, null, null, null, 3, now);
+        insertPermission(sysRoleMenu, "system:role:edit", "编辑角色", 3, null, null, null, 4, now);
+        insertPermission(sysRoleMenu, "system:role:remove", "删除角色", 3, null, null, null, 5, now);
+        // 权限管理权限点
+        insertPermission(sysPermMenu, "system:permission:list", "权限列表", 3, null, null, null, 1, now);
+        insertPermission(sysPermMenu, "system:permission:query", "权限查询", 3, null, null, null, 2, now);
+        insertPermission(sysPermMenu, "system:permission:add", "新增权限", 3, null, null, null, 3, now);
+        insertPermission(sysPermMenu, "system:permission:edit", "编辑权限", 3, null, null, null, 4, now);
+        insertPermission(sysPermMenu, "system:permission:remove", "删除权限", 3, null, null, null, 5, now);
+        // 系统配置权限点
+        insertPermission(sysConfigMenu, "system:config:view", "查看配置", 3, null, null, null, 1, now);
+        insertPermission(sysConfigMenu, "system:config:edit", "修改配置", 3, null, null, null, 2, now);
+
+        log.info("Permissions initialized");
+    }
+
+    private Long insertPermission(Long parentId, String code, String name, Integer type,
+                                   String path, String component, String icon, Integer sort, LocalDateTime now) {
+        SysPermission p = new SysPermission();
+        p.setParentId(parentId);
+        p.setPermissionCode(code);
+        p.setPermissionName(name);
+        p.setPermissionType(type);
+        p.setPath(path);
+        p.setComponent(component);
+        p.setIcon(icon);
+        p.setSortOrder(sort);
+        p.setStatus(1);
+        p.setVisible(1);
+        p.setDeleted(0);
+        p.setCreatedAt(now);
+        p.setUpdatedAt(now);
+        sysPermissionMapper.insert(p);
+        return p.getId();
+    }
+
+    private void initRoles() {
+        Long roleCount = sysRoleMapper.selectCount(null);
+        if (roleCount > 0) {
+            log.info("Roles already exist, skip");
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 创建超级管理员角色
+        SysRole adminRole = new SysRole();
+        adminRole.setRoleCode("admin");
+        adminRole.setRoleName("超级管理员");
+        adminRole.setDescription("拥有所有权限");
+        adminRole.setDataScope(1);
+        adminRole.setStatus(1);
+        adminRole.setSortOrder(1);
+        adminRole.setCreatedAt(now);
+        adminRole.setUpdatedAt(now);
+        adminRole.setDeleted(0);
+        sysRoleMapper.insert(adminRole);
+
+        // 创建运营角色
+        SysRole operatorRole = new SysRole();
+        operatorRole.setRoleCode("operator");
+        operatorRole.setRoleName("运营人员");
+        operatorRole.setDescription("负责日常运营操作");
+        operatorRole.setDataScope(2);
+        operatorRole.setStatus(1);
+        operatorRole.setSortOrder(2);
+        operatorRole.setCreatedAt(now);
+        operatorRole.setUpdatedAt(now);
+        operatorRole.setDeleted(0);
+        sysRoleMapper.insert(operatorRole);
+
+        // 创建风控角色
+        SysRole riskRole = new SysRole();
+        riskRole.setRoleCode("risk");
+        riskRole.setRoleName("风控专员");
+        riskRole.setDescription("负责风控管理");
+        riskRole.setDataScope(2);
+        riskRole.setStatus(1);
+        riskRole.setSortOrder(3);
+        riskRole.setCreatedAt(now);
+        riskRole.setUpdatedAt(now);
+        riskRole.setDeleted(0);
+        sysRoleMapper.insert(riskRole);
+
+        // 给运营角色分配基础权限
+        List<String> operatorPerms = Arrays.asList(
+                "dashboard:view",
+                "merchant:list:view", "merchant:audit:view",
+                "channel:list:view", "channel:route:view",
+                "trade:order:view", "trade:order:query",
+                "trade:refund:view", "trade:refund:add",
+                "risk:rules:view", "risk:events:view",
+                "recon:tasks:view", "recon:reports:view"
+        );
+        assignRolePermissions(operatorRole.getId(), operatorPerms, now);
+
+        // 给风控角色分配风控相关权限
+        List<String> riskPerms = Arrays.asList(
+                "dashboard:view",
+                "risk:rules:view", "risk:rules:add", "risk:rules:edit",
+                "risk:events:view", "risk:events:handle",
+                "trade:order:view", "trade:refund:view", "trade:refund:audit"
+        );
+        assignRolePermissions(riskRole.getId(), riskPerms, now);
+
+        // 给admin用户分配admin角色
+        SysUser adminUser = sysUserMapper.selectOne(
+                new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, "admin")
+        );
+        if (adminUser != null) {
+            SysUserRole ur = new SysUserRole();
+            ur.setUserId(adminUser.getId());
+            ur.setRoleId(adminRole.getId());
+            ur.setCreatedAt(now);
+            sysUserRoleMapper.insert(ur);
+        }
+
+        log.info("Roles initialized: 3 roles (admin, operator, risk)");
+    }
+
+    private void assignRolePermissions(Long roleId, List<String> permCodes, LocalDateTime now) {
+        if (permCodes == null || permCodes.isEmpty()) return;
+        List<SysPermission> perms = sysPermissionMapper.selectList(
+                new LambdaQueryWrapper<SysPermission>()
+                        .in(SysPermission::getPermissionCode, permCodes)
+                        .eq(SysPermission::getDeleted, 0)
+        );
+        for (SysPermission p : perms) {
+            SysRolePermission rp = new SysRolePermission();
+            rp.setRoleId(roleId);
+            rp.setPermissionId(p.getId());
+            rp.setCreatedAt(now);
+            sysRolePermissionMapper.insert(rp);
+        }
     }
 }
